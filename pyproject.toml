@@ -1,0 +1,13 @@
+[project]
+name = "guajiraclimateagents"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.123.8",
+    "langchain>=1.1.2",
+    "langchain-anthropic>=1.2.0",
+    "langchain-openai>=1.1.0",
+    "langgraph>=1.0.4",
+]
