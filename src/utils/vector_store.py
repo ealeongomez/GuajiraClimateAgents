@@ -1,3 +1,9 @@
+# ======================================================
+# Project : GuajiraClimateAgents
+# Author  : Eder Arley León Gómez
+# GitHub  : https://github.com/ealeongomez
+# License : MIT
+# ======================================================
 """
 Vector store utilities using ChromaDB for persistent embeddings storage.
 
