@@ -9,22 +9,35 @@
 import sys
 from pathlib import Path
 
+from colorama import init, Fore, Style
 from dotenv import load_dotenv
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_ollama import OllamaEmbeddings, ChatOllama
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.utils.vector_store import VectorStore
 
+init(autoreset=True)  # Inicializar colorama
 load_dotenv()
 
 # ================================================================
 # Inicializar componentes
 # ================================================================
-embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-store = VectorStore(collection_name="climate_docs", embedding_function=embeddings)
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+# Embeddings locales con Ollama (nomic-embed-text o mxbai-embed-large)
+embeddings = OllamaEmbeddings(
+    model="nomic-embed-text"
+)
+store = VectorStore(collection_name="climate_docs_ollama", embedding_function=embeddings)
+
+# LLM local con Ollama (opciones: llama3.2:1b, deepseek-r1:1.5b, llama3.2)
+llm = ChatOllama(
+    model="llama3.2:1b",  # Modelo rápido
+    temperature=0,
+    num_predict=256,
+    num_ctx=2048
+)
+
 
 # ================================================================
 # Definir Tool
@@ -51,20 +64,21 @@ def search_documents(query: str) -> str:
 tools = [search_documents]
 agent = create_react_agent(llm, tools)
 
-print(f"📚 Base de datos: {store.get_collection_count()} documentos")
-print("🔧 Tool disponible: search_documents")
-print("Escribe 'salir' para terminar.\n")
+print(f"{Fore.CYAN}📚 Base de datos: {store.get_collection_count()} documentos")
+print(f"{Fore.CYAN}🔧 Tool disponible: search_documents")
+print(f"{Fore.YELLOW}Escribe 'salir' para terminar.\n")
 
 # ================================================================
 # Main loop
 # ================================================================
 while True:
-    question = input("❓ Pregunta: ").strip()
+    question = input(f"{Fore.GREEN}❓ Pregunta: {Style.RESET_ALL}").strip()
 
     if question.lower() in ("salir", "exit", "q"):
+        print(f"{Fore.YELLOW}👋 ¡Hasta luego!")
         break
 
     if question:
         response = agent.invoke({"messages": [("user", question)]})
         answer = response["messages"][-1].content
-        print(f"\n💬 {answer}\n")
+        print(f"\n{Fore.BLUE}💬 {answer}{Style.RESET_ALL}\n")
