@@ -3,7 +3,8 @@
         "."
     ],
     "graphs": {
-        "agent": "./src/agents/main.py:agent"
+        "agent": "./src/agents/main.py:agent",
+        "climate_guajira": "./src/agents/climate_guajira/graph.py:graph"
     },
     "env": ".env"
 }
