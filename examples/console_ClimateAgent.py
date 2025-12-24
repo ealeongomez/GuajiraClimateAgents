@@ -40,6 +40,10 @@ DB_CONFIG = {
     'database': os.getenv('DB_NAME', 'ClimateDB')
 }
 
+# Nota: La tabla climate_observations incluye columnas temporales optimizadas:
+# year, month, day, hour - extraídas automáticamente de datetime
+# Estas columnas están indexadas para consultas eficientes
+
 # ================================================================
 # INICIALIZAR COMPONENTES
 # ================================================================
@@ -205,6 +209,187 @@ def listar_municipios_disponibles() -> str:
         return f"Error: {str(e)}"
 
 
+@tool
+def obtener_estadisticas_por_mes(municipio: str, anio: int) -> str:
+    """Obtiene estadísticas climáticas mensuales de un municipio para un año específico.
+    
+    Usa las columnas temporales optimizadas (year, month) para consultas eficientes.
+    
+    Args:
+        municipio: Nombre del municipio (ej: 'riohacha', 'maicao').
+        anio: Año a consultar (ej: 2024, 2023).
+    
+    Returns:
+        Estadísticas mensuales del municipio para el año especificado.
+    """
+    try:
+        conn = pymssql.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        
+        query = """
+            SELECT 
+                month,
+                COUNT(*) as registros,
+                AVG(wind_speed_10m) as velocidad_promedio_viento,
+                AVG(temperature_2m) as temperatura_promedio,
+                SUM(precipitation) as precipitacion_total
+            FROM climate_observations
+            WHERE municipio = %s AND year = %s
+            GROUP BY month
+            ORDER BY month
+        """
+        
+        cursor.execute(query, (municipio.lower().replace(' ', '_'), anio))
+        rows = cursor.fetchall()
+        conn.close()
+        
+        if not rows:
+            return f"No se encontraron datos para {municipio} en el año {anio}"
+        
+        meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 
+                'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+        
+        result = f"📅 Estadísticas mensuales de {municipio.title()} - {anio}:\n\n"
+        for row in rows:
+            mes_num = row[0]
+            mes_nombre = meses[mes_num - 1] if 1 <= mes_num <= 12 else str(mes_num)
+            result += f"• {mes_nombre}: viento={row[2]:.2f} km/h, "
+            result += f"temp={row[3]:.2f}°C, precip={row[4]:.2f}mm\n"
+        
+        return result
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+@tool
+def obtener_estadisticas_por_hora(municipio: str, anio: int, mes: int) -> str:
+    """Obtiene estadísticas climáticas por hora del día para un mes específico.
+    
+    Usa la columna temporal 'hour' para análisis por hora del día (0-23).
+    
+    Args:
+        municipio: Nombre del municipio (ej: 'riohacha', 'maicao').
+        anio: Año a consultar (ej: 2024).
+        mes: Mes a consultar (1-12).
+    
+    Returns:
+        Estadísticas por hora del día para el mes especificado.
+    """
+    try:
+        conn = pymssql.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        
+        query = """
+            SELECT 
+                hour,
+                COUNT(*) as registros,
+                AVG(wind_speed_10m) as velocidad_promedio_viento,
+                AVG(temperature_2m) as temperatura_promedio
+            FROM climate_observations
+            WHERE municipio = %s AND year = %s AND month = %s
+            GROUP BY hour
+            ORDER BY hour
+        """
+        
+        cursor.execute(query, (municipio.lower().replace(' ', '_'), anio, mes))
+        rows = cursor.fetchall()
+        conn.close()
+        
+        if not rows:
+            return f"No se encontraron datos para {municipio} en {mes}/{anio}"
+        
+        meses = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+        mes_nombre = meses[mes] if 1 <= mes <= 12 else str(mes)
+        
+        result = f"🕐 Estadísticas por hora - {municipio.title()} ({mes_nombre} {anio}):\n\n"
+        
+        # Mostrar resumen de horas pico y valle
+        max_wind = max(rows, key=lambda x: x[2])
+        min_wind = min(rows, key=lambda x: x[2])
+        
+        result += f"⬆️  Hora con más viento: {max_wind[0]:02d}:00 ({max_wind[2]:.2f} km/h)\n"
+        result += f"⬇️  Hora con menos viento: {min_wind[0]:02d}:00 ({min_wind[2]:.2f} km/h)\n\n"
+        
+        result += "Promedios por hora:\n"
+        for row in rows[:8]:  # Mostrar solo primeras 8 horas para no saturar
+            result += f"• {row[0]:02d}:00 - viento: {row[2]:.2f} km/h, temp: {row[3]:.2f}°C\n"
+        
+        if len(rows) > 8:
+            result += f"\n... ({len(rows) - 8} horas más)\n"
+        
+        return result
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+@tool
+def comparar_anios(municipio: str, anio1: int, anio2: int) -> str:
+    """Compara estadísticas climáticas entre dos años para un municipio.
+    
+    Usa la columna temporal 'year' para comparaciones eficientes entre años.
+    
+    Args:
+        municipio: Nombre del municipio (ej: 'riohacha', 'maicao').
+        anio1: Primer año a comparar.
+        anio2: Segundo año a comparar.
+    
+    Returns:
+        Comparación de estadísticas entre los dos años.
+    """
+    try:
+        conn = pymssql.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        
+        query = """
+            SELECT 
+                year,
+                COUNT(*) as registros,
+                AVG(wind_speed_10m) as velocidad_promedio_viento,
+                MAX(wind_speed_10m) as velocidad_maxima_viento,
+                AVG(temperature_2m) as temperatura_promedio,
+                SUM(precipitation) as precipitacion_total
+            FROM climate_observations
+            WHERE municipio = %s AND year IN (%s, %s)
+            GROUP BY year
+            ORDER BY year
+        """
+        
+        cursor.execute(query, (municipio.lower().replace(' ', '_'), anio1, anio2))
+        rows = cursor.fetchall()
+        conn.close()
+        
+        if len(rows) < 2:
+            return f"No hay suficientes datos para comparar {anio1} y {anio2} en {municipio}"
+        
+        result = f"📊 Comparación {anio1} vs {anio2} - {municipio.title()}:\n\n"
+        
+        data = {row[0]: row for row in rows}
+        
+        for year in [anio1, anio2]:
+            if year in data:
+                row = data[year]
+                result += f"Año {year}:\n"
+                result += f"  • Registros: {row[1]:,}\n"
+                result += f"  • Viento promedio: {row[2]:.2f} km/h\n"
+                result += f"  • Viento máximo: {row[3]:.2f} km/h\n"
+                result += f"  • Temperatura promedio: {row[4]:.2f}°C\n"
+                result += f"  • Precipitación total: {row[5]:.2f} mm\n\n"
+        
+        # Calcular diferencias
+        if anio1 in data and anio2 in data:
+            diff_viento = data[anio2][2] - data[anio1][2]
+            diff_temp = data[anio2][4] - data[anio1][4]
+            
+            result += "Diferencias:\n"
+            result += f"  • Viento: {diff_viento:+.2f} km/h\n"
+            result += f"  • Temperatura: {diff_temp:+.2f}°C\n"
+        
+        return result
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
 # ================================================================
 # TOOLS - BASE VECTORIAL (ATLAS EÓLICO)
 # ================================================================
@@ -249,9 +434,17 @@ def consultar_atlas_eolico(pregunta: str) -> str:
 # CREAR AGENTE
 # ================================================================
 tools = [
+    # Herramientas básicas
     obtener_estadisticas_municipio,
     comparar_municipios_viento,
     listar_municipios_disponibles,
+    
+    # Herramientas con columnas temporales optimizadas
+    obtener_estadisticas_por_mes,
+    obtener_estadisticas_por_hora,
+    comparar_anios,
+    
+    # Herramienta RAG
     consultar_atlas_eolico
 ]
 
@@ -268,8 +461,14 @@ def print_header():
     print(f"\n{Fore.GREEN}Capacidades:")
     print(f"{Fore.GREEN}  📊 Consultar base de datos con datos históricos climáticos")
     print(f"{Fore.GREEN}  📚 Consultar Atlas Eólico de Colombia")
-    print(f"{Fore.GREEN}  🔍 Comparar municipios")
+    print(f"{Fore.GREEN}  🔍 Comparar municipios y años")
     print(f"{Fore.GREEN}  📈 Obtener estadísticas detalladas")
+    print(f"{Fore.GREEN}  📅 Analizar datos por mes y hora del día")
+    print(f"{Fore.GREEN}  ⚡ Consultas optimizadas con índices temporales")
+    print(f"\n{Fore.YELLOW}Ejemplos de preguntas:")
+    print(f"{Fore.YELLOW}  • ¿Cómo fue el viento en Riohacha durante 2024?")
+    print(f"{Fore.YELLOW}  • Compara el viento entre 2023 y 2024 en Maicao")
+    print(f"{Fore.YELLOW}  • ¿A qué hora del día hay más viento en Manaure?")
     print(f"\n{Fore.YELLOW}Escribe 'salir' para terminar.\n")
 
 
@@ -283,8 +482,22 @@ def main():
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM climate_observations")
         count = cursor.fetchone()[0]
+        
+        # Verificar columnas temporales
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = 'climate_observations' 
+            AND COLUMN_NAME IN ('year', 'month', 'day', 'hour')
+        """)
+        temp_cols = cursor.fetchone()[0]
+        
         conn.close()
         print(f"{Fore.CYAN}✅ Conectado a base de datos: {count:,} registros")
+        if temp_cols == 4:
+            print(f"{Fore.CYAN}✅ Columnas temporales optimizadas detectadas")
+        else:
+            print(f"{Fore.YELLOW}⚠️  Advertencia: No se detectaron columnas temporales")
     except Exception as e:
         print(f"{Fore.RED}⚠️  Error de conexión a DB: {e}")
     
