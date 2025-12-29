@@ -23,30 +23,34 @@ from src.agents.climate_guajira import create_graph, Configuration
 from src.bot.thread_manager import ThreadManager
 from src.bot.image_handler import ImageHandler
 from src.bot.checkpointer import get_checkpointer
+from src.utils.logger import setup_logger, log_user_interaction, log_error_with_context
 
 load_dotenv()
+
+# Configurar logger para el bot
+logger = setup_logger("TelegramBot")
 
 # Configuración
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 # Inicializar componentes globales con diagnóstico
-print("🔧 Inicializando componentes del bot...")
+logger.info("🔧 Inicializando componentes del bot...")
 config = Configuration()
 
 # Verificar configuración de DB
 db_config = config.get_db_config()
-print(f"📊 DB Config: server={db_config['server']}, database={db_config['database']}")
+logger.info(f"📊 DB Config: server={db_config['server']}, database={db_config['database']}")
 
 checkpointer = get_checkpointer()
-print("✅ Checkpointer inicializado")
+logger.info("✅ Checkpointer inicializado")
 
 graph = create_graph(config, checkpointer=checkpointer)
-print("✅ Grafo inicializado")
+logger.info("✅ Grafo inicializado")
 
 thread_manager = ThreadManager()
 image_handler = ImageHandler(PROJECT_ROOT / "data" / "user_images")
-print("✅ Managers inicializados")
+logger.info("✅ Managers inicializados")
 
 
 class ClimateBot:
@@ -87,6 +91,8 @@ class ClimateBot:
         """
         user_id = update.effective_user.id
         username = update.effective_user.first_name or "Usuario"
+        
+        logger.info(f"🆕 User {user_id} ({username}) | Command: /start")
         
         welcome_msg = f"""
 ¡Hola {username}! 👋
@@ -152,7 +158,10 @@ Escribe tu pregunta o usa /help para ver ejemplos.
         Reinicia la conversación del usuario (nuevo thread_id).
         """
         user_id = update.effective_user.id
-        thread_manager.reset_thread(user_id)
+        old_thread = thread_manager.threads.get(user_id)
+        new_thread_id = thread_manager.reset_thread(user_id)
+        
+        logger.info(f"🔄 User {user_id} | Command: /reset | Old thread: {old_thread.thread_id if old_thread else 'N/A'} | New thread: {new_thread_id}")
         
         await update.message.reply_text(
             "✅ Conversación reiniciada.\n\n"
@@ -166,6 +175,8 @@ Escribe tu pregunta o usa /help para ver ejemplos.
         """
         user_id = update.effective_user.id
         stats = thread_manager.get_user_stats(user_id)
+        
+        logger.info(f"📊 User {user_id} | Command: /stats | Messages: {stats['messages']} | Images: {stats['images']}")
         
         # Obtener info de imágenes
         total_images_stored = len(image_handler.get_user_images(user_id))
@@ -203,7 +214,7 @@ Escribe tu pregunta o usa /help para ver ejemplos.
             config_dict = {"configurable": {"thread_id": thread_id}}
             
             # Invocar el agente con historial persistente
-            print(f"🤖 Invocando agente para user {user_id}: '{user_message[:50]}...'")
+            logger.info(f"🤖 User {user_id} | Thread: {thread_id} | Message: '{user_message[:50]}...'")
             response = graph.invoke(
                 {"messages": [("user", user_message)]},
                 config=config_dict
@@ -211,7 +222,10 @@ Escribe tu pregunta o usa /help para ver ejemplos.
             
             # Extraer respuesta del asistente
             assistant_message = response["messages"][-1].content
-            print(f"✅ Respuesta generada ({len(assistant_message)} chars)")
+            logger.info(f"✅ User {user_id} | Response generated: {len(assistant_message)} chars")
+            
+            # Log de interacción estructurado
+            log_user_interaction(logger, user_id, user_message, len(assistant_message))
             
             # Buscar si hay imágenes generadas en la respuesta
             image_paths = self._extract_image_paths(assistant_message)
@@ -220,6 +234,8 @@ Escribe tu pregunta o usa /help para ver ejemplos.
                 # Limpiar mensaje de rutas de imágenes
                 clean_message = self._remove_image_paths(assistant_message)
                 await update.message.reply_text(clean_message)
+                
+                logger.info(f"📷 User {user_id} | Sending {len(image_paths)} image(s)")
                 
                 # Enviar cada imagen encontrada
                 for img_path_str in image_paths:
@@ -236,10 +252,12 @@ Escribe tu pregunta o usa /help para ver ejemplos.
                                 caption=f"📊 {img_path.name}"
                             )
                         
+                        logger.info(f"✅ User {user_id} | Image sent: {img_path.name}")
+                        
                         # Guardar copia para el usuario
                         image_handler.save_user_image(user_id, img_path)
                     else:
-                        print(f"⚠️ Imagen no encontrada: {img_path}")
+                        logger.warning(f"⚠️ User {user_id} | Image not found: {img_path}")
             else:
                 # Solo texto, sin imágenes
                 await update.message.reply_text(assistant_message)
@@ -249,8 +267,6 @@ Escribe tu pregunta o usa /help para ver ejemplos.
             
         except Exception as e:
             # Manejo de errores robusto con logging detallado
-            import traceback
-            
             error_msg = (
                 f"❌ Ocurrió un error al procesar tu mensaje:\n\n"
                 f"`{str(e)}`\n\n"
@@ -258,15 +274,16 @@ Escribe tu pregunta o usa /help para ver ejemplos.
             )
             await update.message.reply_text(error_msg, parse_mode='Markdown')
             
-            # Log detallado del error
-            print(f"\n{'='*70}")
-            print(f"❌ Error para user {user_id}")
-            print(f"Mensaje: {user_message}")
-            print(f"Error: {e}")
-            print(f"Tipo: {type(e).__name__}")
-            print(f"\n📋 Traceback:")
-            traceback.print_exc()
-            print(f"{'='*70}\n")
+            # Log estructurado del error
+            log_error_with_context(
+                logger,
+                e,
+                {
+                    'user_id': user_id,
+                    'message': user_message[:100],
+                    'thread_id': thread_manager.threads.get(user_id, {}).thread_id if user_id in thread_manager.threads else 'N/A'
+                }
+            )
     
     def _extract_image_paths(self, message: str) -> list[str]:
         """Extrae rutas absolutas de imágenes del mensaje del agente.
@@ -326,9 +343,9 @@ Escribe tu pregunta o usa /help para ver ejemplos.
         El bot se ejecutará continuamente hasta que se detenga
         con Ctrl+C o se reciba una señal de interrupción.
         """
-        print("🤖 ClimateGuajira Bot iniciado")
-        print(f"📊 Usuarios activos: {len(thread_manager.get_all_users())}")
-        print("🔄 Presiona Ctrl+C para detener\n")
+        logger.info("🤖 ClimateGuajira Bot iniciado")
+        logger.info(f"📊 Usuarios activos: {len(thread_manager.get_all_users())}")
+        logger.info("🔄 Bot en modo polling - Esperando mensajes...")
         
         # Iniciar polling
         self.app.run_polling(

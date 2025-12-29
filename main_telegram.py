@@ -33,8 +33,17 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # IMPORTANTE: Cargar .env ANTES de importar cualquier módulo
 env_path = PROJECT_ROOT / ".env"
 load_dotenv(env_path)
-print(f"🔧 Cargando variables de entorno desde: {env_path}")
-print(f"✅ Archivo .env {'encontrado' if env_path.exists() else 'NO ENCONTRADO'}")
+
+# Configurar logging
+from src.utils.logger import setup_logger
+logger = setup_logger("MainTelegram", log_dir=PROJECT_ROOT / "logs")
+
+logger.info("=" * 70)
+logger.info(f"Cargando variables de entorno desde: {env_path}")
+if env_path.exists():
+    logger.info("✅ Archivo .env encontrado")
+else:
+    logger.error("❌ Archivo .env NO ENCONTRADO")
 
 from src.bot import ClimateBot
 
@@ -43,10 +52,9 @@ def main():
     """Función principal para iniciar el bot."""
     import os
     
-    print("=" * 70)
-    print("🌬️  ClimateGuajira Telegram Bot")
-    print("=" * 70)
-    print()
+    logger.info("=" * 70)
+    logger.info("🌬️  ClimateGuajira Telegram Bot")
+    logger.info("=" * 70)
     
     # Verificar variables de entorno críticas
     required_vars = {
@@ -56,7 +64,7 @@ def main():
         'DB_PASSWORD': os.getenv('DB_PASSWORD')
     }
     
-    print("🔍 Verificando variables de entorno:")
+    logger.info("🔍 Verificando variables de entorno:")
     missing_vars = []
     for var_name, var_value in required_vars.items():
         if var_value:
@@ -64,28 +72,29 @@ def main():
                 display = f"***{var_value[-4:]}" if len(var_value) > 4 else "***"
             else:
                 display = var_value
-            print(f"   ✅ {var_name}: {display}")
+            logger.info(f"   ✅ {var_name}: {display}")
         else:
-            print(f"   ❌ {var_name}: NO CONFIGURADA")
+            logger.error(f"   ❌ {var_name}: NO CONFIGURADA")
             missing_vars.append(var_name)
     
     if missing_vars:
-        print(f"\n❌ Error: Faltan variables de entorno: {', '.join(missing_vars)}")
-        print("💡 Asegúrate de tener un archivo .env con todas las variables necesarias")
+        logger.error(f"Error: Faltan variables de entorno: {', '.join(missing_vars)}")
+        logger.error("💡 Asegúrate de tener un archivo .env con todas las variables necesarias")
         sys.exit(1)
     
-    print()
+    logger.info("Todas las variables de entorno están configuradas correctamente")
     
     try:
         # Inicializar y ejecutar bot
+        logger.info("Inicializando bot de Telegram...")
         bot = ClimateBot()
+        logger.info("Bot inicializado correctamente")
+        logger.info("Iniciando polling... (Presiona Ctrl+C para detener)")
         bot.run()
     except KeyboardInterrupt:
-        print("\n\n👋 Bot detenido por el usuario")
+        logger.info("\n👋 Bot detenido por el usuario")
     except Exception as e:
-        print(f"\n❌ Error fatal: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.critical(f"❌ Error fatal: {e}", exc_info=True)
         sys.exit(1)
 
 
