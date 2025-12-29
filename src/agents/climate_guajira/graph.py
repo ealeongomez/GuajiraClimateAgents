@@ -20,19 +20,36 @@ from src.agents.climate_guajira.prompts import SYSTEM_PROMPT
 load_dotenv()
 
 
-def create_graph(config: Configuration | None = None):
+def create_graph(config: Configuration | None = None, checkpointer=None):
     """Create and return the ClimateGuajira agent graph.
     
     This function builds the LangGraph agent with:
     - Configured LLM model
     - RAG tools for Atlas Eólico
+    - Database tools for historical data
+    - Visualization tools for plots
     - System prompt for climate expertise
+    - Optional checkpointer for state persistence
     
     Args:
         config: Optional configuration. Uses defaults if not provided.
+        checkpointer: Optional checkpointer for state persistence (e.g., SqliteSaver).
+                     Required for maintaining conversation history across sessions.
         
     Returns:
         Compiled LangGraph agent ready for invocation.
+    
+    Example:
+        >>> # Without persistence
+        >>> graph = create_graph()
+        >>> response = graph.invoke({"messages": [...]})
+        
+        >>> # With persistence (Telegram bot)
+        >>> from langgraph.checkpoint.sqlite import SqliteSaver
+        >>> checkpointer = SqliteSaver.from_conn_string("checkpoints.db")
+        >>> graph = create_graph(checkpointer=checkpointer)
+        >>> config = {"configurable": {"thread_id": "user_123"}}
+        >>> response = graph.invoke({"messages": [...]}, config=config)
     """
     if config is None:
         config = Configuration()
@@ -41,13 +58,13 @@ def create_graph(config: Configuration | None = None):
     model = config.get_model()
     tools = create_tools(config)
     
-    # Create the ReAct agent with system message
+    # Create the ReAct agent with optional checkpointer
     graph = create_react_agent(
         model=model,
         tools=tools,
         prompt=SYSTEM_PROMPT,
+        checkpointer=checkpointer,
     )
-
     
     return graph
 

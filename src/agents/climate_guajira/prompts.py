@@ -87,6 +87,14 @@ REGLAS ABSOLUTAS (NO NEGOCIABLES):
 - graficar_patron_horario: Patrón horario de 24h (gráfica polar)
 - graficar_viento_temperatura: Relación viento vs temperatura
 
+⚠️ IMPORTANTE - FORMATO DE IMÁGENES:
+Cuando uses herramientas de visualización, estas retornarán líneas con formato:
+  📁 IMG_PATH: /ruta/absoluta/imagen.png
+
+DEBES mantener este formato EXACTAMENTE como lo retorna la herramienta.
+NO lo conviertas en links markdown, NO lo reformatees.
+Simplemente incluye la salida de la herramienta tal cual en tu respuesta.
+
 📍 MUNICIPIOS DISPONIBLES
 
 albania, barrancas, distraccion, el_molino, fonseca, hatonuevo,

@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import sys
+import uuid
 from pathlib import Path
 from typing import List
 from datetime import datetime
@@ -26,7 +27,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 matplotlib.use('Agg')
 
 
-def _save_plot(fig, filename: str, project_root: Path) -> str:
+def _save_plot(fig, filename: str, project_root: Path) -> tuple[str, Path]:
     """Guarda la figura en disco.
     
     Args:
@@ -35,13 +36,13 @@ def _save_plot(fig, filename: str, project_root: Path) -> str:
         project_root: Ruta raíz del proyecto
     
     Returns:
-        Ruta relativa del archivo guardado
+        Tupla con (ruta_relativa, ruta_absoluta) del archivo guardado
     """
     filepath = project_root / "src" / "agents" / "climate_guajira" / "images" / filename
     fig.savefig(filepath, dpi=100, bbox_inches='tight')
     plt.close(fig)
     
-    return str(filepath.relative_to(project_root))
+    return str(filepath.relative_to(project_root)), filepath
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -500,10 +501,11 @@ def create_tools(config: Configuration | None = None) -> List:
             
             plt.tight_layout()
             
-            # Guardar imagen
+            # Guardar imagen con UUID único para evitar colisiones
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"serie_temporal_{municipio}_{timestamp}.png"
-            filepath_rel = _save_plot(fig, filename, PROJECT_ROOT)
+            unique_id = uuid.uuid4().hex[:8]
+            filename = f"serie_temporal_{municipio}_{timestamp}_{unique_id}.png"
+            filepath_rel, filepath_abs = _save_plot(fig, filename, PROJECT_ROOT)
             
             # Calcular estadísticas
             promedio = df['wind_speed_10m'].mean()
@@ -518,7 +520,7 @@ def create_tools(config: Configuration | None = None) -> List:
 • Registros: {len(df):,}
 • Viento: promedio={promedio:.2f}, max={maximo:.2f}, min={minimo:.2f} km/h
 
-📁 Imagen: {filepath_rel}
+📁 IMG_PATH: {filepath_abs}
 """
         except Exception as e:
             return f"Error al generar gráfica: {str(e)}"
@@ -583,17 +585,18 @@ def create_tools(config: Configuration | None = None) -> List:
             
             plt.tight_layout()
             
-            # Guardar imagen
+            # Guardar imagen con UUID único
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"comparacion_{variable}_{timestamp}.png"
-            filepath_rel = _save_plot(fig, filename, PROJECT_ROOT)
+            unique_id = uuid.uuid4().hex[:8]
+            filename = f"comparacion_{variable}_{timestamp}_{unique_id}.png"
+            filepath_rel, filepath_abs = _save_plot(fig, filename, PROJECT_ROOT)
             
             # Construir resultado
             result = "✅ Comparación generada\n\n📊 Resultados:\n"
             for _, row in df.iterrows():
                 result += f"• {row['municipio'].title()}: {row['promedio']:.2f}\n"
             
-            result += f"\n📁 Imagen: {filepath_rel}"
+            result += f"\n📁 IMG_PATH: {filepath_abs}"
             
             return result
         except Exception as e:
@@ -661,10 +664,11 @@ def create_tools(config: Configuration | None = None) -> List:
             
             plt.tight_layout()
             
-            # Guardar imagen
+            # Guardar imagen con UUID único
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"patron_horario_{municipio}_{anio}_{mes}_{timestamp}.png"
-            filepath_rel = _save_plot(fig, filename, PROJECT_ROOT)
+            unique_id = uuid.uuid4().hex[:8]
+            filename = f"patron_horario_{municipio}_{anio}_{mes}_{timestamp}_{unique_id}.png"
+            filepath_rel, filepath_abs = _save_plot(fig, filename, PROJECT_ROOT)
             
             # Encontrar hora pico
             max_hour = df.loc[df['velocidad_promedio'].idxmax()]
@@ -678,7 +682,7 @@ def create_tools(config: Configuration | None = None) -> List:
 • Hora valle: {int(min_hour['hour']):02d}:00 ({min_hour['velocidad_promedio']:.2f} km/h)
 • Variación: {max_hour['velocidad_promedio'] - min_hour['velocidad_promedio']:.2f} km/h
 
-📁 Imagen: {filepath_rel}
+📁 IMG_PATH: {filepath_abs}
 """
         except Exception as e:
             return f"Error al generar patrón horario: {str(e)}"
@@ -748,10 +752,11 @@ def create_tools(config: Configuration | None = None) -> List:
             
             fig.tight_layout()
             
-            # Guardar imagen
+            # Guardar imagen con UUID único
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"viento_temp_{municipio}_{timestamp}.png"
-            filepath_rel = _save_plot(fig, filename, PROJECT_ROOT)
+            unique_id = uuid.uuid4().hex[:8]
+            filename = f"viento_temp_{municipio}_{timestamp}_{unique_id}.png"
+            filepath_rel, filepath_abs = _save_plot(fig, filename, PROJECT_ROOT)
             
             # Calcular estadísticas
             promedio_viento = df['velocidad_viento'].mean()
@@ -765,7 +770,7 @@ def create_tools(config: Configuration | None = None) -> List:
 • Viento: {promedio_viento:.2f} km/h
 • Temperatura: {promedio_temp:.2f} °C
 
-📁 Imagen: {filepath_rel}
+📁 IMG_PATH: {filepath_abs}
 """
         except Exception as e:
             return f"Error al generar gráfica: {str(e)}"
