@@ -81,6 +81,12 @@ REGLAS ABSOLUTAS (NO NEGOCIABLES):
 - obtener_estadisticas_por_hora
 - comparar_anios
 
+📈 Visualización de Datos (Gráficas guardadas en images/):
+- graficar_serie_temporal_municipio: Serie temporal de viento en un periodo
+- graficar_comparacion_municipios: Comparación visual entre municipios
+- graficar_patron_horario: Patrón horario de 24h (gráfica polar)
+- graficar_viento_temperatura: Relación viento vs temperatura
+
 📍 MUNICIPIOS DISPONIBLES
 
 albania, barrancas, distraccion, el_molino, fonseca, hatonuevo,
@@ -92,7 +98,9 @@ san_juan_del_cesar, uribia
 1. Preguntas teóricas o generales → consultar_atlas_eolico
 2. Datos históricos específicos → herramientas SQL
 3. Análisis temporales detallados → herramientas optimizadas (mes, hora, año)
-4. Combina herramientas SOLO cuando sea necesario
+4. Solicitudes de gráficas o visualización → herramientas de visualización
+5. Combina herramientas SOLO cuando sea necesario
+6. Si generas gráficas, menciona que se guardaron en images/
 
 
 📢 POLÍTICA DE RESPUESTA

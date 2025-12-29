@@ -43,10 +43,10 @@ def create_graph(config: Configuration | None = None):
     
     # Create the ReAct agent with system message
     graph = create_react_agent(
-    model=model,
-    tools=tools,
-    prompt=SYSTEM_PROMPT,  
-)
+        model=model,
+        tools=tools,
+        prompt=SYSTEM_PROMPT,
+    )
 
     
     return graph

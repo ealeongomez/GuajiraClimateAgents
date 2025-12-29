@@ -11,11 +11,37 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from typing import List
+from datetime import datetime
 
 import pymssql
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib
+import numpy as np
 from langchain_core.tools import tool
 from langchain_core.output_parsers import StrOutputParser
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+
+# Configurar matplotlib para no usar GUI
+matplotlib.use('Agg')
+
+
+def _save_plot(fig, filename: str, project_root: Path) -> str:
+    """Guarda la figura en disco.
+    
+    Args:
+        fig: Figura de matplotlib
+        filename: Nombre del archivo
+        project_root: Ruta raíz del proyecto
+    
+    Returns:
+        Ruta relativa del archivo guardado
+    """
+    filepath = project_root / "src" / "agents" / "climate_guajira" / "images" / filename
+    fig.savefig(filepath, dpi=100, bbox_inches='tight')
+    plt.close(fig)
+    
+    return str(filepath.relative_to(project_root))
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -68,14 +94,7 @@ def create_tools(config: Configuration | None = None) -> List:
     
     @tool
     def consultar_atlas_eolico(pregunta: str) -> str:
-        """Consulta el Atlas Eólico de Colombia sobre energía eólica.
-        
-        Usa esta herramienta para preguntas sobre:
-        - Potencial eólico en Colombia y La Guajira
-        - Velocidad y dirección del viento
-        - Zonas aptas para parques eólicos
-        - Capacidad de generación eólica
-        - Mapas y datos del recurso eólico
+        """Consulta el Atlas Eólico sobre potencial eólico, zonas aptas y capacidad de generación.
         
         Args:
             pregunta: Pregunta sobre energía eólica en Colombia.
@@ -101,16 +120,13 @@ def create_tools(config: Configuration | None = None) -> List:
     
     @tool
     def buscar_documentos(query: str) -> str:
-        """Busca documentos relevantes en el Atlas Eólico sin generar respuesta.
-        
-        Usa esta herramienta cuando necesites ver los documentos originales
-        sin procesamiento adicional.
+        """Busca documentos originales en el Atlas Eólico con referencias de página.
         
         Args:
             query: Términos de búsqueda.
         
         Returns:
-            Fragmentos de documentos encontrados con referencias de página.
+            Fragmentos de documentos encontrados.
         """
         docs = vector_store.similarity_search(query, k=config.retrieval_k)
         
@@ -131,17 +147,10 @@ def create_tools(config: Configuration | None = None) -> List:
     
     @tool
     def obtener_estadisticas_municipio(municipio: str) -> str:
-        """Obtiene estadísticas climáticas históricas de un municipio de La Guajira.
-        
-        Usa esta herramienta para obtener promedios, máximos y mínimos de
-        variables climáticas como velocidad del viento, temperatura, etc.
-        
-        Municipios disponibles: albania, barrancas, distraccion, el_molino,
-        fonseca, hatonuevo, la_jagua_del_pilar, maicao, manaure, mingueo,
-        riohacha, san_juan_del_cesar, uribia.
+        """Estadísticas climáticas de un municipio: viento, temperatura, precipitación.
         
         Args:
-            municipio: Nombre del municipio (ej: 'riohacha', 'maicao').
+            municipio: Nombre del municipio (ej: 'riohacha', 'maicao', 'uribia').
         
         Returns:
             Estadísticas del municipio.
@@ -184,10 +193,10 @@ def create_tools(config: Configuration | None = None) -> List:
     
     @tool
     def comparar_municipios_viento(municipios: str) -> str:
-        """Compara la velocidad del viento entre varios municipios.
+        """Compara velocidad del viento entre municipios (separados por comas).
         
         Args:
-            municipios: Municipios separados por comas (ej: 'riohacha,maicao,uribia').
+            municipios: Municipios separados por comas.
         
         Returns:
             Comparación de velocidad del viento.
@@ -229,10 +238,10 @@ def create_tools(config: Configuration | None = None) -> List:
     
     @tool
     def listar_municipios_disponibles() -> str:
-        """Lista todos los municipios disponibles en la base de datos.
+        """Lista los 13 municipios con cantidad de registros y viento promedio.
         
         Returns:
-            Lista de municipios con cantidad de registros.
+            Lista de municipios disponibles.
         """
         try:
             conn = pymssql.connect(**db_config)
@@ -267,16 +276,14 @@ def create_tools(config: Configuration | None = None) -> List:
     
     @tool
     def obtener_estadisticas_por_mes(municipio: str, anio: int) -> str:
-        """Obtiene estadísticas climáticas mensuales de un municipio para un año específico.
-        
-        Usa las columnas temporales optimizadas (year, month) para consultas eficientes.
+        """Estadísticas mensuales (12 meses) de un municipio para un año.
         
         Args:
-            municipio: Nombre del municipio (ej: 'riohacha', 'maicao').
-            anio: Año a consultar (ej: 2024, 2023).
+            municipio: Nombre del municipio.
+            anio: Año a consultar (ej: 2024).
         
         Returns:
-            Estadísticas mensuales del municipio para el año especificado.
+            Estadísticas mensuales del año.
         """
         try:
             conn = pymssql.connect(**db_config)
@@ -318,18 +325,15 @@ def create_tools(config: Configuration | None = None) -> List:
     
     @tool
     def obtener_estadisticas_por_hora(municipio: str, anio: int, mes: int) -> str:
-        """Obtiene estadísticas climáticas por hora del día para un mes específico.
-        
-        Usa la columna temporal 'hour' para análisis por hora del día (0-23).
-        Útil para identificar patrones diarios y optimizar generación eólica.
+        """Estadísticas por hora del día (0-23) para un mes y año.
         
         Args:
-            municipio: Nombre del municipio (ej: 'riohacha', 'maicao').
-            anio: Año a consultar (ej: 2024).
-            mes: Mes a consultar (1-12).
+            municipio: Nombre del municipio.
+            anio: Año (ej: 2024).
+            mes: Mes (1-12).
         
         Returns:
-            Estadísticas por hora del día para el mes especificado.
+            Estadísticas horarias del mes.
         """
         try:
             conn = pymssql.connect(**db_config)
@@ -380,17 +384,15 @@ def create_tools(config: Configuration | None = None) -> List:
     
     @tool
     def comparar_anios(municipio: str, anio1: int, anio2: int) -> str:
-        """Compara estadísticas climáticas entre dos años para un municipio.
-        
-        Usa la columna temporal 'year' para comparaciones eficientes entre años.
+        """Compara estadísticas climáticas entre dos años.
         
         Args:
-            municipio: Nombre del municipio (ej: 'riohacha', 'maicao').
-            anio1: Primer año a comparar.
-            anio2: Segundo año a comparar.
+            municipio: Nombre del municipio.
+            anio1: Primer año.
+            anio2: Segundo año.
         
         Returns:
-            Comparación de estadísticas entre los dos años.
+            Comparación entre años.
         """
         try:
             conn = pymssql.connect(**db_config)
@@ -444,6 +446,330 @@ def create_tools(config: Configuration | None = None) -> List:
         except Exception as e:
             return f"Error: {str(e)}"
     
+    # ================================================================
+    # VISUALIZATION TOOLS - GRÁFICAS Y ANÁLISIS VISUAL
+    # ================================================================
+    
+    @tool
+    def graficar_serie_temporal_municipio(municipio: str, fecha_inicio: str, fecha_fin: str) -> str:
+        """Gráfica de serie temporal de viento (formato YYYY-MM-DD).
+        
+        Args:
+            municipio: Nombre del municipio.
+            fecha_inicio: Fecha inicio (YYYY-MM-DD).
+            fecha_fin: Fecha fin (YYYY-MM-DD).
+        
+        Returns:
+            Resumen y ruta de imagen.
+        """
+        try:
+            conn = pymssql.connect(**db_config)
+            
+            query = """
+                SELECT datetime, wind_speed_10m, temperature_2m
+                FROM climate_observations
+                WHERE municipio = %s
+                AND datetime >= %s
+                AND datetime <= %s
+                ORDER BY datetime
+            """
+            
+            df = pd.read_sql(query, conn, params=(
+                municipio.lower().replace(' ', '_'), 
+                fecha_inicio, 
+                fecha_fin
+            ))
+            conn.close()
+            
+            if df.empty:
+                return f"No se encontraron datos para {municipio} entre {fecha_inicio} y {fecha_fin}"
+            
+            # Crear gráfica
+            fig, ax = plt.subplots(figsize=(14, 5))
+            
+            ax.plot(df['datetime'], df['wind_speed_10m'], 
+                   color='#2E86AB', linewidth=0.8, alpha=0.8)
+            ax.fill_between(df['datetime'], df['wind_speed_10m'], 
+                           alpha=0.3, color='#2E86AB')
+            
+            ax.set_xlabel('Fecha', fontsize=12)
+            ax.set_ylabel('Velocidad del Viento (km/h)', fontsize=12)
+            ax.set_title(f'🌬️ Velocidad del Viento - {municipio.title()} ({fecha_inicio} a {fecha_fin})', 
+                        fontsize=14, fontweight='bold')
+            ax.grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            
+            # Guardar imagen
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"serie_temporal_{municipio}_{timestamp}.png"
+            filepath_rel = _save_plot(fig, filename, PROJECT_ROOT)
+            
+            # Calcular estadísticas
+            promedio = df['wind_speed_10m'].mean()
+            maximo = df['wind_speed_10m'].max()
+            minimo = df['wind_speed_10m'].min()
+            
+            return f"""✅ Gráfica generada
+
+📊 Resumen:
+• Municipio: {municipio.title()}
+• Periodo: {fecha_inicio} a {fecha_fin}
+• Registros: {len(df):,}
+• Viento: promedio={promedio:.2f}, max={maximo:.2f}, min={minimo:.2f} km/h
+
+📁 Imagen: {filepath_rel}
+"""
+        except Exception as e:
+            return f"Error al generar gráfica: {str(e)}"
+    
+    @tool
+    def graficar_comparacion_municipios(municipios: str, variable: str = "wind_speed_10m") -> str:
+        """Gráfica de barras comparando municipios (separados por comas).
+        
+        Args:
+            municipios: Municipios separados por comas.
+            variable: wind_speed_10m, temperature_2m, o precipitation.
+        
+        Returns:
+            Resumen y ruta de imagen.
+        """
+        try:
+            conn = pymssql.connect(**db_config)
+            
+            munis = [m.strip().lower().replace(' ', '_') for m in municipios.split(',')]
+            placeholders = ', '.join(['%s'] * len(munis))
+            
+            query = f"""
+                SELECT 
+                    municipio, 
+                    AVG({variable}) as promedio
+                FROM climate_observations
+                WHERE municipio IN ({placeholders})
+                GROUP BY municipio
+                ORDER BY promedio DESC
+            """
+            
+            df = pd.read_sql(query, conn, params=tuple(munis))
+            conn.close()
+            
+            if df.empty:
+                return "No se encontraron datos para los municipios especificados."
+            
+            # Crear gráfica
+            fig, ax = plt.subplots(figsize=(12, 6))
+            
+            colors = plt.cm.Blues(np.linspace(0.4, 0.9, len(df)))
+            bars = ax.barh(df['municipio'], df['promedio'], color=colors)
+            
+            # Labels según la variable
+            labels_map = {
+                'wind_speed_10m': ('Velocidad del Viento (km/h)', '🌬️'),
+                'temperature_2m': ('Temperatura (°C)', '🌡️'),
+                'precipitation': ('Precipitación (mm)', '💧')
+            }
+            
+            label, emoji = labels_map.get(variable, ('Valor', '📊'))
+            
+            ax.set_xlabel(label, fontsize=12)
+            ax.set_title(f'{emoji} Comparación de {label} por Municipio', 
+                        fontsize=14, fontweight='bold')
+            ax.grid(True, axis='x', alpha=0.3)
+            
+            # Agregar valores en las barras
+            for bar, val in zip(bars, df['promedio']):
+                ax.text(val + (val * 0.01), bar.get_y() + bar.get_height()/2, 
+                       f'{val:.1f}', va='center', fontsize=10)
+            
+            plt.tight_layout()
+            
+            # Guardar imagen
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"comparacion_{variable}_{timestamp}.png"
+            filepath_rel = _save_plot(fig, filename, PROJECT_ROOT)
+            
+            # Construir resultado
+            result = "✅ Comparación generada\n\n📊 Resultados:\n"
+            for _, row in df.iterrows():
+                result += f"• {row['municipio'].title()}: {row['promedio']:.2f}\n"
+            
+            result += f"\n📁 Imagen: {filepath_rel}"
+            
+            return result
+        except Exception as e:
+            return f"Error al generar comparación: {str(e)}"
+    
+    @tool
+    def graficar_patron_horario(municipio: str, anio: int, mes: int) -> str:
+        """Gráfica polar de 24 horas del viento (patrón diario).
+        
+        Args:
+            municipio: Nombre del municipio.
+            anio: Año (ej: 2024).
+            mes: Mes (1-12).
+        
+        Returns:
+            Análisis y ruta de imagen.
+        """
+        try:
+            conn = pymssql.connect(**db_config)
+            
+            query = """
+                SELECT 
+                    hour,
+                    AVG(wind_speed_10m) as velocidad_promedio
+                FROM climate_observations
+                WHERE municipio = %s AND year = %s AND month = %s
+                GROUP BY hour
+                ORDER BY hour
+            """
+            
+            df = pd.read_sql(query, conn, params=(
+                municipio.lower().replace(' ', '_'), 
+                anio, 
+                mes
+            ))
+            conn.close()
+            
+            if df.empty:
+                return f"No se encontraron datos para {municipio} en {mes}/{anio}"
+            
+            # Crear gráfica polar
+            fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='polar'))
+            
+            # Convertir horas a radianes
+            theta = np.linspace(0, 2 * np.pi, 24, endpoint=False)
+            values = df['velocidad_promedio'].values
+            
+            # Cerrar el círculo
+            theta = np.append(theta, theta[0])
+            values = np.append(values, values[0])
+            
+            ax.plot(theta, values, color='#2E86AB', linewidth=2)
+            ax.fill(theta, values, alpha=0.3, color='#2E86AB')
+            
+            # Configurar etiquetas
+            ax.set_xticks(np.linspace(0, 2 * np.pi, 24, endpoint=False))
+            ax.set_xticklabels([f'{h}h' for h in range(24)])
+            
+            meses = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+            mes_nombre = meses[mes] if 1 <= mes <= 12 else str(mes)
+            
+            ax.set_title(f'🕐 Patrón Horario del Viento\n{municipio.title()} - {mes_nombre} {anio}', 
+                        fontsize=14, fontweight='bold', pad=20)
+            
+            plt.tight_layout()
+            
+            # Guardar imagen
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"patron_horario_{municipio}_{anio}_{mes}_{timestamp}.png"
+            filepath_rel = _save_plot(fig, filename, PROJECT_ROOT)
+            
+            # Encontrar hora pico
+            max_hour = df.loc[df['velocidad_promedio'].idxmax()]
+            min_hour = df.loc[df['velocidad_promedio'].idxmin()]
+            
+            return f"""✅ Patrón horario generado
+
+📊 Análisis {mes_nombre} {anio}:
+• Municipio: {municipio.title()}
+• Hora pico: {int(max_hour['hour']):02d}:00 ({max_hour['velocidad_promedio']:.2f} km/h)
+• Hora valle: {int(min_hour['hour']):02d}:00 ({min_hour['velocidad_promedio']:.2f} km/h)
+• Variación: {max_hour['velocidad_promedio'] - min_hour['velocidad_promedio']:.2f} km/h
+
+📁 Imagen: {filepath_rel}
+"""
+        except Exception as e:
+            return f"Error al generar patrón horario: {str(e)}"
+    
+    @tool
+    def graficar_viento_temperatura(municipio: str, fecha_inicio: str, fecha_fin: str) -> str:
+        """Gráfica con doble eje: viento vs temperatura (YYYY-MM-DD).
+        
+        Args:
+            municipio: Nombre del municipio.
+            fecha_inicio: Fecha inicio (YYYY-MM-DD).
+            fecha_fin: Fecha fin (YYYY-MM-DD).
+        
+        Returns:
+            Resumen y ruta de imagen.
+        """
+        try:
+            conn = pymssql.connect(**db_config)
+            
+            query = """
+                SELECT 
+                    CAST(datetime AS DATE) as fecha,
+                    AVG(wind_speed_10m) as velocidad_viento,
+                    AVG(temperature_2m) as temperatura
+                FROM climate_observations
+                WHERE municipio = %s
+                AND datetime >= %s
+                AND datetime <= %s
+                GROUP BY CAST(datetime AS DATE)
+                ORDER BY fecha
+            """
+            
+            df = pd.read_sql(query, conn, params=(
+                municipio.lower().replace(' ', '_'),
+                fecha_inicio,
+                fecha_fin
+            ))
+            conn.close()
+            
+            if df.empty:
+                return f"No se encontraron datos para {municipio} entre {fecha_inicio} y {fecha_fin}"
+            
+            # Crear gráfica con doble eje
+            fig, ax1 = plt.subplots(figsize=(14, 6))
+            
+            # Eje izquierdo - Viento
+            color1 = '#2E86AB'
+            ax1.plot(df['fecha'], df['velocidad_viento'], 
+                    color=color1, linewidth=2, label='Viento')
+            ax1.fill_between(df['fecha'], df['velocidad_viento'], 
+                            alpha=0.2, color=color1)
+            ax1.set_xlabel('Fecha', fontsize=12)
+            ax1.set_ylabel('Velocidad del Viento (km/h)', color=color1, fontsize=12)
+            ax1.tick_params(axis='y', labelcolor=color1)
+            
+            # Eje derecho - Temperatura
+            ax2 = ax1.twinx()
+            color2 = '#E94F37'
+            ax2.plot(df['fecha'], df['temperatura'], 
+                    color=color2, linewidth=2, label='Temperatura')
+            ax2.set_ylabel('Temperatura (°C)', color=color2, fontsize=12)
+            ax2.tick_params(axis='y', labelcolor=color2)
+            
+            plt.title(f'🌬️ Viento vs 🌡️ Temperatura - {municipio.title()}', 
+                     fontsize=14, fontweight='bold')
+            ax1.grid(True, alpha=0.3)
+            
+            fig.tight_layout()
+            
+            # Guardar imagen
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"viento_temp_{municipio}_{timestamp}.png"
+            filepath_rel = _save_plot(fig, filename, PROJECT_ROOT)
+            
+            # Calcular estadísticas
+            promedio_viento = df['velocidad_viento'].mean()
+            promedio_temp = df['temperatura'].mean()
+            
+            return f"""✅ Comparación generada
+
+📊 Promedios ({fecha_inicio} a {fecha_fin}):
+• Municipio: {municipio.title()}
+• Días: {len(df)}
+• Viento: {promedio_viento:.2f} km/h
+• Temperatura: {promedio_temp:.2f} °C
+
+📁 Imagen: {filepath_rel}
+"""
+        except Exception as e:
+            return f"Error al generar gráfica: {str(e)}"
+    
     # Return all tools
     return [
         # RAG tools
@@ -459,5 +785,11 @@ def create_tools(config: Configuration | None = None) -> List:
         obtener_estadisticas_por_mes,
         obtener_estadisticas_por_hora,
         comparar_anios,
+        
+        # Visualization tools
+        graficar_serie_temporal_municipio,
+        graficar_comparacion_municipios,
+        graficar_patron_horario,
+        graficar_viento_temperatura,
     ]
 
