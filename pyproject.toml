@@ -5,6 +5,7 @@ description = "AI agent system for climate analysis and wind energy assessment i
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "apscheduler>=3.10.0",
     "colorama>=0.4.6",
     "fastapi[standard]>=0.123.8",
     "langchain>=1.1.2",
