@@ -14,9 +14,14 @@ if [ $? != 0 ]; then
 
     # Ejecutar SOLO conda deactivate en cada pane (zsh login shell)
     #tmux send-keys -t "$SESSION:editor.0" "zsh -lc 'conda deactivate'" C-m
+    
+    # Run update scheduler: uv run python src/scheduler/update_scheduler.py --run-now
     #tmux send-keys -t "$SESSION:editor.1" "zsh -lc 'conda deactivate'" C-m
-    # uv run python src/scheduler/update_scheduler.py --run-now
+    
+    # Run htop
     tmux send-keys -t "$SESSION:editor.2" "zsh -lc 'htop'" C-m
+    
+    # Free console
     #tmux send-keys -t "$SESSION:editor.3" "zsh -lc 'htop'" C-m
 fi
 
