@@ -9,6 +9,8 @@ An intelligent AI agent system for climate analysis and wind energy potential as
 ## 📑 Table of Contents
 
 - [Overview](#-overview)
+- [Quick Start](#-quick-start)
+- [System Architecture](#-system-architecture)
 - [Features](#-features)
 - [Project Structure](#-project-structure)
 - [Technologies](#-technologies)
@@ -50,6 +52,66 @@ python main_telegram.py
 
 # Or run the CLI agent
 python -m src.agents.climate_guajira
+```
+
+## 🏛️ System Architecture
+
+The GuajiraClimateAgents system is built with a modular architecture that integrates multiple AI technologies:
+
+<div align="center">
+  <img src="docs/chatbot-doctorade.svg" alt="System Architecture Diagram" width="100%">
+  <p><em>Complete system architecture showing data flow and component interactions</em></p>
+</div>
+
+### Architecture Overview
+
+The system consists of several interconnected layers:
+
+1. **User Interfaces Layer**
+   - 💬 Telegram Bot (primary interface)
+   - 🖥️ CLI Console (development & testing)
+   - 📊 LangGraph Studio (visual debugging)
+
+2. **Agent Layer (LangGraph)**
+   - 🤖 Intelligent agent with ReAct pattern
+   - 🔒 Security prompt with injection protection
+   - 🧠 Tool selection and orchestration
+   - 💾 State management with checkpointing
+
+3. **Tools & Services Layer**
+   - 📚 RAG Tools (Wind Atlas queries)
+   - 📊 Database Tools (historical data queries)
+   - 📈 Visualization Tools (chart generation)
+   - 🔄 Update Services (data synchronization)
+
+4. **Data Layer**
+   - 🗄️ SQL Server (Climate observations 2015-2025)
+   - 📦 ChromaDB (Vector embeddings for RAG)
+   - 🧠 PyTorch Models (LSTM forecasting)
+   - 💾 SQLite (Conversation checkpoints)
+
+5. **External Services**
+   - 🌐 Open-Meteo API (real-time climate data)
+   - 🤖 OpenAI API (GPT-4 & embeddings)
+   - 📡 Telegram API (bot communication)
+
+### Data Flow
+
+```
+User Query (Telegram/CLI)
+    ↓
+LangGraph Agent
+    ↓
+Tool Selection & Execution
+    ↓
+├─→ RAG System → ChromaDB → Wind Atlas Documents
+├─→ SQL Queries → SQL Server → Climate Data
+├─→ Visualization → Matplotlib → Charts/Graphs
+└─→ LSTM Models → PyTorch → Forecasts
+    ↓
+Response Generation (GPT-4)
+    ↓
+User (with text + images)
 ```
 
 ## ✨ Features
@@ -613,6 +675,8 @@ If you use this project in your research, please cite:
 
 For more detailed information, see:
 
+### Documentation Files
+- **`docs/chatbot-doctorade.svg`** - System architecture diagram (visual overview)
 - **`docs/DATABASE_UPDATE_GUIDE.md`** - Complete guide to the automatic update system (500+ lines)
 - **`docs/ORGANIZATION_SUMMARY.md`** - System architecture and organization overview
 - **`scripts/README.md`** - Scripts usage and cron configuration guide
