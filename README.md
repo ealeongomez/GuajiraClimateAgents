@@ -2,9 +2,55 @@
 
 An intelligent AI agent system for climate analysis and wind energy potential assessment in La Guajira, Colombia.
 
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![LangChain](https://img.shields.io/badge/LangChain-🦜-green.svg)](https://langchain.com/)
+
+## 📑 Table of Contents
+
+- [Overview](#-overview)
+- [Features](#-features)
+- [Project Structure](#-project-structure)
+- [Technologies](#-technologies)
+- [Requirements](#-requirements)
+- [Installation](#-installation)
+- [Usage](#-usage)
+- [Available Tools](#-available-tools)
+- [Available Municipalities](#-available-municipalities)
+- [Telegram Bot Architecture](#-telegram-bot-architecture)
+- [Automatic Database Updates](#-automatic-database-updates)
+- [Notebooks](#-notebooks)
+- [LSTM Models](#-lstm-models)
+- [Security Features](#-security-features)
+- [Deployment](#-deployment)
+- [Troubleshooting](#-troubleshooting)
+- [Additional Documentation](#-additional-documentation)
+- [Citation](#-citation)
+- [Acknowledgments](#-acknowledgments)
+
 ## 🌟 Overview
 
 GuajiraClimateAgents is a GenAI-powered platform that combines Retrieval-Augmented Generation (RAG) with historical climate databases to provide insights about wind energy potential and climate patterns in La Guajira region. The system uses LangGraph agents to intelligently query both the Colombian Wind Atlas and real-time climate observations database.
+
+## 🚀 Quick Start
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/ealeongomez/GuajiraClimateAgents.git
+cd GuajiraClimateAgents
+
+# 2. Install dependencies
+uv sync
+
+# 3. Configure environment variables
+cp .env.example .env  # Edit with your credentials
+
+# 4. Start the Telegram bot
+python main_telegram.py
+
+# Or run the CLI agent
+python -m src.agents.climate_guajira
+```
 
 ## ✨ Features
 
@@ -15,6 +61,9 @@ GuajiraClimateAgents is a GenAI-powered platform that combines Retrieval-Augment
 - **🌬️ Wind Analysis**: Compare wind speeds, analyze seasonal patterns, and identify optimal hours for wind energy generation
 - **⚡ Temporal Optimization**: Efficient queries using indexed temporal columns (year, month, day, hour)
 - **🧠 LSTM Models**: Pre-trained models for wind speed forecasting (available for all municipalities)
+- **📈 Data Visualization**: Automatic generation of charts, graphs, and polar plots
+- **🔒 Security**: Built-in protection against prompt injection attacks
+- **🔄 Auto-Update System**: Automated database updates from Open-Meteo API
 
 ### Telegram Bot Features
 - **💬 Interactive Interface**: Production-ready Telegram bot for easy access
@@ -32,38 +81,81 @@ GuajiraClimateAgents/
 ├── src/                     # Source code
 │   ├── agents/             # LangGraph agent implementation
 │   │   └── climate_guajira/ # Main climate agent
+│   │       ├── tools.py      # Agent tools (RAG, DB, visualization)
+│   │       ├── prompts.py    # System prompts with security
+│   │       ├── graph.py      # LangGraph agent definition
+│   │       ├── state.py      # Agent state management
+│   │       └── configuration.py # Agent configuration
 │   ├── bot/                # Telegram bot implementation
 │   │   ├── telegram_bot.py  # Main bot logic
 │   │   ├── thread_manager.py # Per-user session management
 │   │   ├── image_handler.py  # Image storage and cleanup
 │   │   └── checkpointer.py   # State persistence
+│   ├── scheduler/          # Automatic updates
+│   │   └── update_scheduler.py # Cron-based scheduler
 │   ├── llm/                # LLM clients (Claude, GPT)
 │   ├── prompt_engineering/ # Prompt templates and chains
-│   └── utils/              # Utilities (vector store, caching, etc.)
+│   └── utils/              # Utilities
+│       ├── vector_store.py  # ChromaDB interface
+│       ├── db_updater.py    # Database update system
+│       ├── climate_data.py  # Open-Meteo API client
+│       └── logger.py        # Logging configuration
 ├── data/                    # Data repository
-│   ├── embeddings/         # Vector embeddings storage
+│   ├── embeddings/         # Vector embeddings storage (ChromaDB)
 │   ├── models/             # Trained LSTM models
-│   ├── wind/               # Wind speed CSV files
-│   ├── pdfs/               # Source documents
+│   │   ├── LSTM/          # Final trained models (.pt)
+│   │   └── optuna-LSTM/   # Hyperparameter optimization results
+│   ├── wind/               # Historical wind CSV files (2015-2025)
+│   ├── pdfs/               # Source documents (Wind Atlas)
 │   ├── user_images/        # User-specific generated images
-│   └── checkpoints/        # Conversation state persistence
+│   ├── checkpoints/        # Conversation state persistence
+│   ├── outputs/            # Training results and exports
+│   └── cache/              # API response caching
+├── docs/                   # Documentation
+│   ├── DATABASE_UPDATE_GUIDE.md # Complete update system guide
+│   └── ORGANIZATION_SUMMARY.md  # System architecture overview
+├── scripts/                # Maintenance scripts
+│   ├── update_db_simple.py # Manual database update script
+│   └── update_db.sh        # Cron-compatible bash script
 ├── examples/               # Example implementations
-├── notebooks/              # Jupyter notebooks for analysis
-├── handlers/               # Error and response handlers
+│   ├── console_ClimateAgent.py # CLI agent example
+│   └── console_SimpleRAG.py    # Basic RAG example
+├── notebooks/              # Jupyter notebooks (13 notebooks)
+├── logs/                   # Application logs
 ├── main_telegram.py        # Telegram bot entry point
+├── main.py                 # Alternative entry point
+├── langgraph.json          # LangGraph Studio configuration
 └── pyproject.toml          # Project dependencies (uv)
 ```
 
 ## 🛠️ Technologies
 
+### AI & Agent Framework
 - **LangChain & LangGraph**: Agent orchestration and tool calling
 - **OpenAI GPT-4**: Language model for agent reasoning
-- **python-telegram-bot**: Telegram bot framework
+- **LangGraph Studio**: Visual debugging and development (supported via `langgraph.json`)
+
+### Data & Storage
 - **ChromaDB**: Vector database for document embeddings
-- **SQL Server (pymssql)**: Historical climate observations database
+- **SQL Server (pymssql)**: Historical climate observations database (2015-2025)
+- **SQLite**: State persistence for conversation checkpointing
+
+### Machine Learning
 - **PyTorch**: LSTM models for time series forecasting
+- **Optuna**: Hyperparameter optimization for LSTM training
+
+### Interfaces & Communication
+- **python-telegram-bot**: Production-ready Telegram bot framework
 - **Matplotlib & Pandas**: Data visualization and analysis
+
+### Automation & Scheduling
+- **APScheduler**: Automatic database updates with cron expressions
+- **Open-Meteo API**: Real-time climate data source
+
+### Development Tools
 - **Python 3.11+**: Core programming language
+- **uv**: Fast Python package manager
+- **python-dotenv**: Environment variable management
 
 ## 📋 Requirements
 
@@ -141,6 +233,24 @@ Or use the console example:
 python examples/console_ClimateAgent.py
 ```
 
+### Option 3: LangGraph Studio (Development)
+
+For visual debugging and development, use LangGraph Studio:
+
+```bash
+# Install LangGraph CLI (if not already installed)
+pip install langgraph-cli[inmem]
+
+# Start LangGraph Studio
+langgraph up
+
+# Open browser at http://localhost:8000
+```
+
+The `langgraph.json` configuration file provides two graphs:
+- `agent` - Generic agent from `src/agents/main.py`
+- `climate_guajira` - Main climate agent from `src/agents/climate_guajira/graph.py`
+
 ### Example Questions
 
 The agent can answer questions like:
@@ -172,6 +282,14 @@ The agent can answer questions like:
 - `obtener_estadisticas_por_hora`: Analyze hourly patterns
 - `comparar_anios`: Compare statistics between two years
 
+### Visualization Tools (Charts & Graphs)
+- `graficar_serie_temporal_municipio`: Time series plot of wind speed for a municipality
+- `graficar_comparacion_municipios`: Visual comparison between multiple municipalities
+- `graficar_patron_horario`: 24-hour wind pattern (polar plot)
+- `graficar_viento_temperatura`: Wind speed vs temperature correlation plot
+
+All charts are automatically generated and sent to users via Telegram or saved to the `images/` directory.
+
 ## 🗺️ Available Municipalities
 
 Albania, Barrancas, Distracción, El Molino, Fonseca, Hatonuevo, La Jagua del Pilar, Maicao, Manaure, Mingueo, Riohacha, San Juan del Cesar, Uribia
@@ -201,18 +319,121 @@ The Telegram bot implementation (`src/bot/`) provides a production-ready interfa
 - **Conversation State**: `data/checkpoints/telegram_checkpoints.db` (SQLite)
 - **User Images**: `data/user_images/{user_id}/` (organized by user)
 
+## 🔄 Automatic Database Updates
+
+The system includes an automated update mechanism to keep climate data current:
+
+### Components
+
+- **`src/utils/db_updater.py`**: Main updater module with `ClimateDBUpdater` class
+- **`src/scheduler/update_scheduler.py`**: Scheduler for periodic automatic updates
+- **`scripts/update_db_simple.py`**: Simple script for manual updates
+- **`scripts/update_db.sh`**: Bash script for cron integration
+
+### Features
+
+1. **Incremental Updates**: Only downloads new data since last update
+2. **Duplicate Prevention**: Uses SQL MERGE to avoid duplicate records
+3. **Batch Processing**: Efficient bulk inserts in batches of 1000 records
+4. **Multi-Municipality**: Updates all 13 municipalities automatically
+5. **Error Recovery**: Robust error handling with detailed logging
+6. **Flexible Scheduling**: Support for custom cron expressions
+
+### Update Methods
+
+**Option 1: Cron (Recommended for Production)**
+```bash
+# Edit crontab
+crontab -e
+
+# Add line to update every hour at :05
+5 * * * * /path/to/GuajiraClimateAgents/scripts/update_db.sh
+```
+
+**Option 2: Python Scheduler**
+```bash
+# Run with default schedule (every hour at :05)
+python src/scheduler/update_scheduler.py
+
+# Custom schedule (every 30 minutes)
+python src/scheduler/update_scheduler.py --cron "*/30 * * * *"
+
+# Run once and exit
+python src/scheduler/update_scheduler.py --once
+```
+
+**Option 3: Manual Update**
+```bash
+# Simple Python script
+python scripts/update_db_simple.py
+```
+
+**Option 4: Programmatic**
+```python
+from src.utils.db_updater import update_database_from_env
+
+results = update_database_from_env()
+print(f"Inserted: {results['total_inserted']} records")
+```
+
+### Logging
+
+All updates are logged to:
+- `logs/scheduler.log` - Scheduler activity
+- `logs/errors.log` - Error tracking
+- `logs/cron_updates_YYYYMM.log` - Monthly cron logs
+
 ## 📓 Notebooks
 
-Explore the `notebooks/` directory for:
-- RAG system testing and experimentation
-- Model training and evaluation
-- Database connectivity examples
-- Data analysis and visualization
-- LSTM model performance analysis
+Explore the `notebooks/` directory for interactive development and analysis:
+
+1. **`01_notebook.ipynb`** - Initial project exploration
+2. **`02_RAG.ipynb`** - RAG system testing with OpenAI embeddings
+3. **`03_RAG_Ollama.ipynb`** - RAG system with local Ollama models
+4. **`04_download_data.ipynb`** - Climate data download from Open-Meteo
+5. **`05_training_colab.ipynb`** - LSTM model training (Google Colab)
+6. **`06_performance_model.ipynb`** - Model evaluation and metrics
+7. **`07_connectDB.ipynb`** - Database connection testing
+8. **`08_checkDB.ipynb`** - Database integrity checks
+9. **`09_SQLAgent.ipynb`** - SQL agent experimentation
+10. **`10_restructure_datetime.ipynb`** - Database schema optimization
+11. **`11_UpdateDB.ipynb`** - Interactive database updates
+12. **`12_CheckDB.ipynb`** - Database status verification
+13. **`13_Forecast.ipynb`** - Wind speed forecasting with LSTM models
 
 ## 📦 LSTM Models
 
 Pre-trained LSTM models are available in `data/models/LSTM/` for all 13 municipalities. These models were optimized using Optuna hyperparameter tuning and can forecast wind speeds based on historical patterns.
+
+### Model Details
+- **Training Data**: 2015-2025 historical wind speed data
+- **Optimization**: Optuna studies saved in `data/models/optuna-LSTM/`
+- **Format**: PyTorch (.pt) model files
+- **Coverage**: All 13 La Guajira municipalities
+- **Notebook**: See `13_Forecast.ipynb` for usage examples
+
+## 🔒 Security Features
+
+The agent includes multiple security layers:
+
+### Prompt Injection Protection
+- System prompts with maximum priority rules
+- Rejection of attempts to modify agent behavior
+- Filtering of malicious instructions in user input
+- Separation of data sources from instructions
+
+### Best Practices
+- Environment variables for sensitive credentials (never hardcoded)
+- SQL injection prevention through parameterized queries
+- Input validation and sanitization
+- Comprehensive error handling without exposing internal details
+
+### Security Rules
+The agent is designed to:
+- Reject role-playing requests outside its domain
+- Ignore instructions embedded in documents or tool outputs
+- Maintain focus on climate and wind energy topics only
+- Never expose system prompts or internal logic
 
 ## 🚀 Deployment
 
@@ -247,12 +468,37 @@ Required for production:
 - `TELEGRAM_BOT_TOKEN`: Bot token from @BotFather
 - `DB_SERVER`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`: SQL Server connection
 
-### Monitoring
+### Monitoring & Logging
 
-- Logs are written to console (stdout/stderr)
-- Consider using `systemd` journal or log aggregation tools
-- Monitor API usage to control costs
-- Track conversation state in SQLite checkpointer
+The system includes comprehensive logging:
+
+**Log Files:**
+- `logs/scheduler.log` - Database update scheduler activity
+- `logs/errors.log` - Error tracking and debugging
+- `logs/telegram_bot.log` - Telegram bot operations
+- `logs/cron_updates_YYYYMM.log` - Monthly cron execution logs
+
+**Monitoring Commands:**
+```bash
+# Watch scheduler logs in real-time
+tail -f logs/scheduler.log
+
+# Check database update status
+python scripts/update_db_simple.py --status
+
+# View conversation checkpoints
+sqlite3 data/checkpoints/telegram_checkpoints.db "SELECT * FROM checkpoints;"
+
+# Monitor API usage
+grep "API" logs/*.log | wc -l
+```
+
+**Metrics to Track:**
+- API usage and costs (OpenAI + Open-Meteo)
+- Database update frequency and success rate
+- User activity (messages, image requests)
+- Conversation state size
+- Image storage usage
 
 ## 📄 License
 
@@ -275,16 +521,43 @@ This is a doctoral research project. For questions or collaborations, please ope
 - Verify `TELEGRAM_BOT_TOKEN` is correctly set in `.env`
 - Check that the bot is running (`python main_telegram.py`)
 - Use `/reset` to restart your conversation
+- Check logs: `tail -f logs/telegram_bot.log`
 
 **Database connection errors:**
 - Verify SQL Server credentials in `.env`
 - Ensure SQL Server is accessible from your network
 - Check that `climate_observations` table exists
+- Test connection: `python notebooks/07_connectDB.ipynb`
 
 **Images not being sent:**
 - Verify write permissions in `data/user_images/` directory
 - Check matplotlib installation: `uv sync`
+- Ensure `src/agents/climate_guajira/images/` exists
 - Review logs for specific error messages
+
+**Conversation history not persisting:**
+- Check `data/checkpoints/telegram_checkpoints.db` exists
+- Verify SQLite permissions
+- Check checkpointer initialization in logs
+
+### Database Update Issues
+
+**Updates failing:**
+- Verify internet connection to Open-Meteo API
+- Check database credentials and connectivity
+- Review `logs/scheduler.log` for specific errors
+- Test manual update: `python scripts/update_db_simple.py`
+
+**Scheduler not running:**
+- For cron: Check crontab with `crontab -l`
+- Verify script has execute permissions: `chmod +x scripts/update_db.sh`
+- Check cron logs: `grep CRON /var/log/syslog` (Linux)
+- For Python scheduler: Ensure it's running in background
+
+**Duplicate data:**
+- The system uses MERGE to prevent duplicates automatically
+- If duplicates exist, check database constraints
+- Run database integrity check: `notebooks/12_CheckDB.ipynb`
 
 ### General Issues
 
@@ -292,11 +565,36 @@ This is a doctoral research project. For questions or collaborations, please ope
 - Run `uv sync` to install all dependencies
 - Verify Python version: `python --version` (must be 3.11+)
 - Check that you're in the correct virtual environment
+- Clear Python cache: `find . -type d -name __pycache__ -exec rm -rf {} +`
 
 **OpenAI API errors:**
-- Verify `OPENAI_API_KEY` is valid
+- Verify `OPENAI_API_KEY` is valid and not expired
 - Check your OpenAI account has credits
 - Monitor rate limits and quotas
+- Consider using caching to reduce API calls
+
+**Vector store errors:**
+- Ensure ChromaDB directory exists: `data/embeddings/`
+- Regenerate embeddings if corrupted: `notebooks/02_RAG.ipynb`
+- Check OpenAI embeddings API access
+
+**LSTM model issues:**
+- Verify model files exist in `data/models/LSTM/`
+- Check PyTorch installation: `python -c "import torch; print(torch.__version__)"`
+- See training notebooks: `05_training_colab.ipynb`, `06_performance_model.ipynb`
+
+### Performance Issues
+
+**Slow responses:**
+- Check database query performance (add indexes if needed)
+- Monitor API latency
+- Consider caching frequently requested data
+- Reduce `retrieval_k` for RAG queries
+
+**High memory usage:**
+- Clear old conversation checkpoints periodically
+- Run image cleanup: Clean `data/user_images/` of old files
+- Monitor ChromaDB size
 
 ## 📚 Citation
 
@@ -311,11 +609,38 @@ If you use this project in your research, please cite:
 }
 ```
 
+## 📖 Additional Documentation
+
+For more detailed information, see:
+
+- **`docs/DATABASE_UPDATE_GUIDE.md`** - Complete guide to the automatic update system (500+ lines)
+- **`docs/ORGANIZATION_SUMMARY.md`** - System architecture and organization overview
+- **`scripts/README.md`** - Scripts usage and cron configuration guide
+- **Inline Docstrings** - All modules include comprehensive docstrings
+
+### Key Features Documentation
+
+- **Agent Tools**: See docstrings in `src/agents/climate_guajira/tools.py`
+- **Security**: Review `SYSTEM_PROMPT` in `src/agents/climate_guajira/prompts.py`
+- **Database Schema**: Check `notebooks/08_checkDB.ipynb` and `10_restructure_datetime.ipynb`
+- **Update System**: Read `docs/DATABASE_UPDATE_GUIDE.md`
+
 ## 🌟 Acknowledgments
 
-- **Colombian Wind Atlas**: Source of wind energy potential data
-- **Open-Meteo**: Historical climate data provider
-- **LangChain/LangGraph**: Agent orchestration framework
+### Data Sources
+- **[Colombian Wind Atlas](https://atlas.ideam.gov.co/visorAtlasVientos.html)** - Wind energy potential data for Colombia
+- **[Open-Meteo](https://open-meteo.com/)** - Historical climate data API (2015-2025)
+- **IDEAM** - Colombian Institute of Hydrology, Meteorology and Environmental Studies
+
+### Technologies & Frameworks
+- **[LangChain](https://langchain.com/)** - LLM application framework
+- **[LangGraph](https://github.com/langchain-ai/langgraph)** - Agent orchestration and state management
+- **[OpenAI](https://openai.com/)** - GPT-4 language model and embeddings
+- **[ChromaDB](https://www.trychroma.com/)** - Vector database for embeddings
+- **[python-telegram-bot](https://python-telegram-bot.org/)** - Telegram Bot API wrapper
+
+### Research Context
+This project is part of doctoral research on **renewable energy systems and climate analysis** in La Guajira, Colombia, focusing on the application of Generative AI and Large Language Models to climate data analysis and decision support systems.
 
 ---
 
