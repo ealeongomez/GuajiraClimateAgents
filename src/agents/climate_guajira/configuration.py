@@ -68,7 +68,7 @@ class Configuration:
             temperature=self.temperature,
         )
     
-    def get_db_config(self) -> Dict[str, str]:
+    def get_db_config(self) -> Dict:
         """Get database configuration dictionary for pymssql.
         
         Returns:
@@ -76,7 +76,7 @@ class Configuration:
         """
         return {
             'server': self.db_server,
-            'port': self.db_port,
+            'port': int(self.db_port),
             'user': self.db_user,
             'password': self.db_password,
             'database': self.db_name

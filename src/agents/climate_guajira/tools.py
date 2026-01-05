@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import sys
 import uuid
+import json
 from pathlib import Path
 from typing import List
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pymssql
 import pandas as pd
@@ -775,6 +776,279 @@ def create_tools(config: Configuration | None = None) -> List:
         except Exception as e:
             return f"Error al generar gráfica: {str(e)}"
     
+    # ================================================================
+    # FORECAST TOOLS - PREDICCIONES
+    # ================================================================
+    
+    @tool
+    def obtener_prediccion_municipio(municipio: str) -> str:
+        """Obtiene la predicción de viento más reciente para un municipio.
+        
+        Consulta la base de datos para obtener las predicciones generadas por el
+        modelo LSTM para las próximas 24 horas. Incluye:
+        - Valores de entrada (últimas 48 horas)
+        - Valores de predicción (próximas 24 horas)
+        - Fecha y hora de inicio de la predicción
+        - Estadísticas (min, max, promedio)
+        
+        Args:
+            municipio: Nombre del municipio (ej: 'riohacha', 'maicao', 'uribia').
+        
+        Returns:
+            Texto con la predicción y estadísticas.
+        
+        Example:
+            >>> obtener_prediccion_municipio("riohacha")
+        """
+        try:
+            municipio = municipio.lower().strip().replace(' ', '_')
+            
+            conn = pymssql.connect(**db_config)
+            cursor = conn.cursor()
+            
+            # Obtener la predicción más reciente
+            query = """
+            SELECT TOP 1
+                municipio,
+                datetime_inicio,
+                wind_speed_input,
+                wind_speed_output,
+                created_at
+            FROM Forecast
+            WHERE municipio = %s
+            ORDER BY created_at DESC
+            """
+            
+            cursor.execute(query, (municipio,))
+            row = cursor.fetchone()
+            
+            if not row:
+                conn.close()
+                return f"❌ No se encontraron predicciones para '{municipio}'.\n\nMunicipios disponibles: albania, barrancas, distraccion, el_molino, fonseca, hatonuevo, la_jagua_del_pilar, maicao, manaure, mingueo, riohacha, san_juan_del_cesar, uribia"
+            
+            mun, dt_inicio, input_json, output_json, created = row
+            
+            # Parsear arrays JSON
+            input_array = json.loads(input_json)
+            output_array = json.loads(output_json)
+            
+            # Calcular estadísticas
+            input_min = min(input_array)
+            input_max = max(input_array)
+            input_mean = sum(input_array) / len(input_array)
+            
+            output_min = min(output_array)
+            output_max = max(output_array)
+            output_mean = sum(output_array) / len(output_array)
+            
+            # Generar horas de predicción
+            forecast_hours = []
+            current = dt_inicio
+            for i in range(24):
+                forecast_hours.append(current.strftime('%Y-%m-%d %H:%M'))
+                current = current + timedelta(hours=1)
+            
+            # Construir respuesta
+            result = f"""
+🔮 PREDICCIÓN DE VIENTO - {municipio.upper().replace('_', ' ')}
+{'='*70}
+
+📅 Fecha de inicio: {dt_inicio.strftime('%Y-%m-%d %H:%M')}
+⏱️  Generada: {created.strftime('%Y-%m-%d %H:%M:%S')}
+
+📊 ESTADÍSTICAS DE ENTRADA (últimas 48 horas):
+   • Mínimo: {input_min:.2f} m/s
+   • Máximo: {input_max:.2f} m/s
+   • Promedio: {input_mean:.2f} m/s
+   • Último valor: {input_array[-1]:.2f} m/s
+
+🔮 ESTADÍSTICAS DE PREDICCIÓN (próximas 24 horas):
+   • Mínimo: {output_min:.2f} m/s
+   • Máximo: {output_max:.2f} m/s
+   • Promedio: {output_mean:.2f} m/s
+   • Primera predicción: {output_array[0]:.2f} m/s
+
+📈 VALORES DE PREDICCIÓN (cada hora):
+"""
+            
+            # Mostrar valores en grupos de 6 horas
+            for i in range(0, 24, 6):
+                result += f"\n   Horas {i+1}-{min(i+6, 24)}:\n"
+                for j in range(i, min(i+6, 24)):
+                    result += f"   • {forecast_hours[j]}: {output_array[j]:.2f} m/s\n"
+            
+            conn.close()
+            
+            return result
+            
+        except Exception as e:
+            return f"Error al obtener predicción: {str(e)}"
+    
+    @tool
+    def graficar_prediccion_municipio(municipio: str) -> str:
+        """Genera una gráfica con datos históricos (48h) y predicción (24h) de viento.
+        
+        Crea una visualización que muestra:
+        - Línea azul: Datos históricos de las últimas 48 horas
+        - Línea roja punteada: Predicción para las próximas 24 horas
+        - Línea vertical gris: Separación entre histórico y predicción
+        - Estadísticas completas de ambos períodos
+        
+        Similar a las gráficas del notebook 13_Forecast.ipynb
+        
+        Args:
+            municipio: Nombre del municipio (ej: 'riohacha', 'maicao', 'uribia').
+        
+        Returns:
+            Texto con estadísticas y ruta de la imagen generada.
+        
+        Example:
+            >>> graficar_prediccion_municipio("riohacha")
+        """
+        try:
+            municipio = municipio.lower().strip().replace(' ', '_')
+            
+            conn = pymssql.connect(**db_config)
+            cursor = conn.cursor()
+            
+            # 1. Obtener predicción más reciente
+            query_forecast = """
+            SELECT TOP 1
+                datetime_inicio,
+                wind_speed_input,
+                wind_speed_output,
+                created_at
+            FROM Forecast
+            WHERE municipio = %s
+            ORDER BY created_at DESC
+            """
+            
+            cursor.execute(query_forecast, (municipio,))
+            row = cursor.fetchone()
+            
+            if not row:
+                conn.close()
+                return f"❌ No se encontraron predicciones para '{municipio}'."
+            
+            dt_inicio, input_json, output_json, created = row
+            
+            # Parsear arrays
+            input_array = json.loads(input_json)
+            output_array = json.loads(output_json)
+            
+            # 2. Obtener datos históricos (últimas 48 horas antes de la predicción)
+            # La predicción comienza donde terminan los datos históricos
+            # Los datos de entrada son las últimas 48 horas
+            historical_start = dt_inicio - timedelta(hours=48)
+            
+            query_historical = """
+            SELECT 
+                datetime,
+                wind_speed_10m
+            FROM climate_observations
+            WHERE municipio = %s
+              AND datetime >= %s
+              AND datetime < %s
+            ORDER BY datetime
+            """
+            
+            cursor.execute(query_historical, (municipio, historical_start, dt_inicio))
+            historical_data = cursor.fetchall()
+            
+            conn.close()
+            
+            # Preparar datos históricos
+            if len(historical_data) > 0:
+                historical_times = [row[0] for row in historical_data]
+                historical_wind = [row[1] for row in historical_data]
+            else:
+                # Si no hay datos en la BD, usar los valores de input
+                historical_times = [historical_start + timedelta(hours=i) for i in range(48)]
+                historical_wind = input_array
+            
+            # Preparar datos de predicción
+            forecast_times = [dt_inicio + timedelta(hours=i) for i in range(24)]
+            forecast_wind = output_array
+            
+            # 3. Crear la gráfica
+            fig, ax = plt.subplots(figsize=(14, 5))
+            
+            # Graficar ventana histórica (48h)
+            ax.plot(historical_times, historical_wind,
+                   marker='o', markersize=3, linewidth=2,
+                   color='steelblue', label='Histórico (48h)', alpha=0.8)
+            
+            # Graficar predicción (24h)
+            ax.plot(forecast_times, forecast_wind,
+                   marker='s', markersize=3, linewidth=2,
+                   color='orangered', label='Predicción (24h)', 
+                   linestyle='--', alpha=0.8)
+            
+            # Línea vertical separando histórico de predicción
+            ax.axvline(x=dt_inicio, color='gray',
+                      linestyle=':', linewidth=2, alpha=0.7,
+                      label='Inicio predicción')
+            
+            # Configuración de la gráfica
+            ax.set_xlabel('Fecha y Hora', fontsize=12, fontweight='bold')
+            ax.set_ylabel('Velocidad del Viento (m/s)', fontsize=12, fontweight='bold')
+            ax.set_title(f'Predicción de Viento - {municipio.upper().replace("_", " ")}',
+                        fontsize=14, fontweight='bold', pad=20)
+            ax.legend(loc='best', fontsize=10)
+            ax.grid(True, alpha=0.3, linestyle='--')
+            
+            # Rotar etiquetas del eje x
+            plt.xticks(rotation=45, ha='right')
+            
+            # Ajustar layout
+            plt.tight_layout()
+            
+            # Guardar figura
+            filename = f"forecast_{municipio}_{uuid.uuid4().hex[:8]}.png"
+            filepath_rel, filepath_abs = _save_plot(fig, filename, PROJECT_ROOT)
+            
+            # Calcular estadísticas
+            hist_min = min(historical_wind)
+            hist_max = max(historical_wind)
+            hist_mean = sum(historical_wind) / len(historical_wind)
+            
+            fore_min = min(forecast_wind)
+            fore_max = max(forecast_wind)
+            fore_mean = sum(forecast_wind) / len(forecast_wind)
+            
+            last_historical = historical_wind[-1]
+            first_forecast = forecast_wind[0]
+            diff = first_forecast - last_historical
+            
+            return f"""
+🔮 GRÁFICA DE PREDICCIÓN GENERADA
+{'='*70}
+
+📍 Municipio: {municipio.upper().replace('_', ' ')}
+📅 Inicio predicción: {dt_inicio.strftime('%Y-%m-%d %H:%M')}
+⏱️  Generada: {created.strftime('%Y-%m-%d %H:%M:%S')}
+
+📊 HISTÓRICO (últimas 48 horas):
+   • Mínimo: {hist_min:.2f} m/s
+   • Máximo: {hist_max:.2f} m/s
+   • Promedio: {hist_mean:.2f} m/s
+   • Último valor: {last_historical:.2f} m/s
+
+🔮 PREDICCIÓN (próximas 24 horas):
+   • Mínimo: {fore_min:.2f} m/s
+   • Máximo: {fore_max:.2f} m/s
+   • Promedio: {fore_mean:.2f} m/s
+   • Primera predicción: {first_forecast:.2f} m/s
+
+📈 TRANSICIÓN:
+   • Diferencia histórico → predicción: {diff:+.2f} m/s
+
+📁 IMG_PATH: {filepath_abs}
+"""
+            
+        except Exception as e:
+            return f"Error al generar gráfica de predicción: {str(e)}"
+    
     # Return all tools
     return [
         # RAG tools
@@ -796,5 +1070,9 @@ def create_tools(config: Configuration | None = None) -> List:
         graficar_comparacion_municipios,
         graficar_patron_horario,
         graficar_viento_temperatura,
+        
+        # Forecast tools
+        obtener_prediccion_municipio,
+        graficar_prediccion_municipio,
     ]
 
