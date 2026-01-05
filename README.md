@@ -21,8 +21,9 @@ An intelligent AI agent system for climate analysis and wind energy potential as
 - [Available Municipalities](#-available-municipalities)
 - [Telegram Bot Architecture](#-telegram-bot-architecture)
 - [Automatic Database Updates](#-automatic-database-updates)
+- [Wind Speed Forecasting](#-wind-speed-forecasting)
 - [Notebooks](#-notebooks)
-- [LSTM Models](#-lstm-models)
+- [LSTM Forecasting System](#-lstm-forecasting-system)
 - [Security Features](#-security-features)
 - [Deployment](#-deployment)
 - [Troubleshooting](#-troubleshooting)
@@ -85,9 +86,9 @@ The system consists of several interconnected layers:
    - 🔄 Update Services (data synchronization)
 
 4. **Data Layer**
-   - 🗄️ SQL Server (Climate observations 2015-2025)
+   - 🗄️ SQL Server (Climate observations 2015-2025 + forecasts)
    - 📦 ChromaDB (Vector embeddings for RAG)
-   - 🧠 PyTorch Models (LSTM forecasting)
+   - 🧠 PyTorch Models (LSTM forecasting - 13 trained models)
    - 💾 SQLite (Conversation checkpoints)
 
 5. **External Services**
@@ -105,13 +106,14 @@ LangGraph Agent
 Tool Selection & Execution
     ↓
 ├─→ RAG System → ChromaDB → Wind Atlas Documents
-├─→ SQL Queries → SQL Server → Climate Data
+├─→ SQL Queries → SQL Server → Climate Data (Historical)
+├─→ SQL Queries → SQL Server → Forecast Data (Predictions)
 ├─→ Visualization → Matplotlib → Charts/Graphs
-└─→ LSTM Models → PyTorch → Forecasts
+└─→ LSTM Models → PyTorch → Real-time Forecasts
     ↓
 Response Generation (GPT-4)
     ↓
-User (with text + images)
+User (with text + images + forecasts)
 ```
 
 ## ✨ Features
@@ -122,7 +124,7 @@ User (with text + images)
 - **📊 Climate Database**: Access historical climate data (2015-2025) from 13 municipalities in La Guajira
 - **🌬️ Wind Analysis**: Compare wind speeds, analyze seasonal patterns, and identify optimal hours for wind energy generation
 - **⚡ Temporal Optimization**: Efficient queries using indexed temporal columns (year, month, day, hour)
-- **🧠 LSTM Models**: Pre-trained models for wind speed forecasting (available for all municipalities)
+- **🔮 LSTM Forecasting**: Real-time wind speed predictions (24-hour ahead forecasts)
 - **📈 Data Visualization**: Automatic generation of charts, graphs, and polar plots
 - **🔒 Security**: Built-in protection against prompt injection attacks
 - **🔄 Auto-Update System**: Automated database updates from Open-Meteo API
@@ -131,6 +133,7 @@ User (with text + images)
 - **💬 Interactive Interface**: Production-ready Telegram bot for easy access
 - **👤 Per-User Sessions**: Independent conversation history for each user
 - **📈 Image Generation**: Automatic chart and graph creation sent directly to Telegram
+- **🔮 Forecast Delivery**: Real-time wind predictions with visual graphs
 - **💾 State Persistence**: Conversation history saved with LangGraph checkpointing
 - **📊 Usage Statistics**: Track messages, images, and activity per user
 - **🔄 Session Management**: Commands to reset conversations and view stats
@@ -143,7 +146,7 @@ GuajiraClimateAgents/
 ├── src/                     # Source code
 │   ├── agents/             # LangGraph agent implementation
 │   │   └── climate_guajira/ # Main climate agent
-│   │       ├── tools.py      # Agent tools (RAG, DB, visualization)
+│   │       ├── tools.py      # Agent tools (RAG, DB, viz, forecast)
 │   │       ├── prompts.py    # System prompts with security
 │   │       ├── graph.py      # LangGraph agent definition
 │   │       ├── state.py      # Agent state management
@@ -153,13 +156,16 @@ GuajiraClimateAgents/
 │   │   ├── thread_manager.py # Per-user session management
 │   │   ├── image_handler.py  # Image storage and cleanup
 │   │   └── checkpointer.py   # State persistence
+│   ├── models/             # Machine Learning models
+│   │   └── forecast_generator.py # LSTM forecast generator
 │   ├── scheduler/          # Automatic updates
 │   │   └── update_scheduler.py # Cron-based scheduler
 │   ├── llm/                # LLM clients (Claude, GPT)
 │   ├── prompt_engineering/ # Prompt templates and chains
 │   └── utils/              # Utilities
 │       ├── vector_store.py  # ChromaDB interface
-│       ├── db_updater.py    # Database update system
+│       ├── db_updater.py    # Climate data update system
+│       ├── forecast_db_updater.py # Forecast data updater
 │       ├── climate_data.py  # Open-Meteo API client
 │       └── logger.py        # Logging configuration
 ├── data/                    # Data repository
@@ -181,7 +187,8 @@ GuajiraClimateAgents/
 │   └── update_db.sh        # Cron-compatible bash script
 ├── examples/               # Example implementations
 │   ├── console_ClimateAgent.py # CLI agent example
-│   └── console_SimpleRAG.py    # Basic RAG example
+│   ├── console_SimpleRAG.py    # Basic RAG example
+│   └── query_forecast.py       # Forecast query examples
 ├── notebooks/              # Jupyter notebooks (13 notebooks)
 ├── logs/                   # Application logs
 ├── main_telegram.py        # Telegram bot entry point
@@ -330,6 +337,12 @@ The agent can answer questions like:
 - "Compare visually Maicao, Riohacha and Uribia"
 - "Plot wind speed vs temperature for Maicao"
 
+**Wind Speed Forecasting:**
+- "What is the wind forecast for Riohacha?"
+- "Show me the prediction for Maicao for the next 24 hours"
+- "Generate a forecast graph for Uribia"
+- "Compare historical vs predicted wind for Manaure"
+
 ## 🔧 Available Tools
 
 ### RAG Tools (Wind Atlas)
@@ -349,6 +362,10 @@ The agent can answer questions like:
 - `graficar_comparacion_municipios`: Visual comparison between multiple municipalities
 - `graficar_patron_horario`: 24-hour wind pattern (polar plot)
 - `graficar_viento_temperatura`: Wind speed vs temperature correlation plot
+
+### Forecasting Tools (LSTM Predictions)
+- `obtener_prediccion_municipio`: Get the latest 24-hour wind speed forecast for a municipality
+- `graficar_prediccion_municipio`: Generate forecast visualization with 48h historical + 24h prediction
 
 All charts are automatically generated and sent to users via Telegram or saved to the `images/` directory.
 
@@ -445,6 +462,95 @@ All updates are logged to:
 - `logs/errors.log` - Error tracking
 - `logs/cron_updates_YYYYMM.log` - Monthly cron logs
 
+## 🔮 Wind Speed Forecasting
+
+The system features an advanced LSTM-based forecasting pipeline that provides 24-hour ahead wind speed predictions.
+
+### How It Works
+
+1. **Historical Data Retrieval**
+   - Fetches last 48 hours of wind speed data from SQL Server
+   - Data is normalized and prepared for the model
+
+2. **Model Prediction**
+   - Loads pre-trained LSTM model for the municipality
+   - Generates 24 hourly predictions
+   - Models use Random Fourier Features (DenseRFF) for enhanced learning
+
+3. **Database Storage**
+   - Predictions stored in `Forecast` table
+   - Includes both input (48h) and output (24h) arrays
+   - Automatic cleanup of old forecasts
+
+4. **User Access**
+   - Query predictions via Telegram bot or CLI
+   - Get text summaries with statistics
+   - Visual graphs showing historical vs predicted values
+
+### Forecast Features
+
+- **🎯 Accuracy**: Models optimized with Optuna hyperparameter tuning
+- **⚡ Speed**: Batch processing for all 13 municipalities
+- **📊 Rich Output**: Min/max/average statistics for historical and predicted values
+- **📈 Visualization**: Graphs with color-coded historical and forecast periods
+- **🔄 Auto-Update**: Can be automated with cron jobs or schedulers
+
+### Example Forecast Query
+
+**Text Query:**
+```
+User: "What is the wind forecast for Riohacha?"
+
+Agent Response:
+🔮 PREDICCIÓN DE VIENTO - RIOHACHA
+
+📅 Predicción generada: 2025-01-05 14:30:00
+📅 Primera hora predicha: 2025-01-05 15:00:00
+
+📊 HISTÓRICO (últimas 48 horas):
+   • Mínimo: 3.2 m/s
+   • Máximo: 8.5 m/s
+   • Promedio: 5.8 m/s
+
+🔮 PREDICCIÓN (próximas 24 horas):
+   • Mínimo: 4.1 m/s
+   • Máximo: 7.9 m/s
+   • Promedio: 6.2 m/s
+```
+
+**Visual Query:**
+```
+User: "Show me a forecast graph for Uribia"
+
+Agent: [Sends image with 48h historical + 24h predicted wind speeds]
+```
+
+### Generating Forecasts
+
+**Interactive (Notebook):**
+```bash
+jupyter notebook notebooks/14_UpdateForecast.ipynb
+```
+
+**Programmatic:**
+```python
+from src.models.forecast_generator import ForecastGenerator
+from src.utils.forecast_db_updater import ForecastDBUpdater
+
+# Generate forecasts
+generator = ForecastGenerator()
+forecasts = generator.generate_all_forecasts()
+
+# Store in database
+updater = ForecastDBUpdater(conn)
+updater.insert_forecasts(forecasts)
+```
+
+**Via Examples:**
+```bash
+python examples/query_forecast.py
+```
+
 ## 📓 Notebooks
 
 Explore the `notebooks/` directory for interactive development and analysis:
@@ -462,17 +568,70 @@ Explore the `notebooks/` directory for interactive development and analysis:
 11. **`11_UpdateDB.ipynb`** - Interactive database updates
 12. **`12_CheckDB.ipynb`** - Database status verification
 13. **`13_Forecast.ipynb`** - Wind speed forecasting with LSTM models
+14. **`14_UpdateForecast.ipynb`** - Generate and update forecasts in database
+15. **`15_CheckForecast.ipynb`** - Verify and analyze forecast accuracy
 
-## 📦 LSTM Models
+## 📦 LSTM Forecasting System
 
-Pre-trained LSTM models are available in `data/models/LSTM/` for all 13 municipalities. These models were optimized using Optuna hyperparameter tuning and can forecast wind speeds based on historical patterns.
+The system includes a complete wind speed forecasting pipeline using deep learning LSTM models.
 
-### Model Details
-- **Training Data**: 2015-2025 historical wind speed data
-- **Optimization**: Optuna studies saved in `data/models/optuna-LSTM/`
+### Pre-trained Models
+Pre-trained LSTM models are available in `data/models/LSTM/` for all 13 municipalities:
+- **Training Data**: 2015-2025 historical wind speed data (hourly)
+- **Optimization**: Optuna hyperparameter tuning (results in `data/models/optuna-LSTM/`)
+- **Architecture**: LSTM with Random Fourier Features (DenseRFF)
 - **Format**: PyTorch (.pt) model files
 - **Coverage**: All 13 La Guajira municipalities
-- **Notebook**: See `13_Forecast.ipynb` for usage examples
+
+### Forecast Pipeline
+
+**1. Model Training** (`notebooks/13_Forecast.ipynb`)
+- Hyperparameter optimization with Optuna
+- Training on historical data
+- Model evaluation and validation
+
+**2. Forecast Generation** (`src/models/forecast_generator.py`)
+- Loads trained LSTM models
+- Uses last 48 hours of historical data
+- Generates 24-hour ahead predictions
+- Batch processing for all municipalities
+
+**3. Database Storage** (`src/utils/forecast_db_updater.py`)
+- Stores predictions in SQL Server `Forecast` table
+- Automatic cleanup of old forecasts
+- JSON format for input/output arrays
+
+**4. Forecast Queries** (Agent Tools)
+- `obtener_prediccion_municipio`: Get text forecast
+- `graficar_prediccion_municipio`: Visual forecast with historical context
+
+### Forecast Structure
+
+Each forecast contains:
+- **Input**: 48 hourly values (recent historical data)
+- **Output**: 24 hourly predictions (next day forecast)
+- **Metadata**: Municipality, start datetime, creation timestamp
+
+### Example Usage
+
+```python
+# Generate forecasts for all municipalities
+from src.models.forecast_generator import ForecastGenerator
+
+generator = ForecastGenerator()
+forecasts = generator.generate_all_forecasts()
+```
+
+```python
+# Query via agent
+"What is the wind forecast for Riohacha?"
+"Show me a forecast graph for Uribia"
+```
+
+### Notebooks
+- **`13_Forecast.ipynb`** - Model training and evaluation
+- **`14_UpdateForecast.ipynb`** - Generate and store forecasts
+- **`15_CheckForecast.ipynb`** - Verify forecast accuracy
 
 ## 🔒 Security Features
 
@@ -644,6 +803,13 @@ This is a doctoral research project. For questions or collaborations, please ope
 - Verify model files exist in `data/models/LSTM/`
 - Check PyTorch installation: `python -c "import torch; print(torch.__version__)"`
 - See training notebooks: `05_training_colab.ipynb`, `06_performance_model.ipynb`
+
+**Forecast issues:**
+- Check if `Forecast` table exists in database
+- Verify forecasts are being generated: `notebooks/14_UpdateForecast.ipynb`
+- Check forecast data: `python examples/query_forecast.py`
+- Ensure LSTM models are loaded correctly
+- Review forecast accuracy: `notebooks/15_CheckForecast.ipynb`
 
 ### Performance Issues
 
