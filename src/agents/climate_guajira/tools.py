@@ -785,17 +785,14 @@ def create_tools(config: Configuration | None = None) -> List:
         """Obtiene la predicción de viento más reciente para un municipio.
         
         Consulta la base de datos para obtener las predicciones generadas por el
-        modelo LSTM para las próximas 24 horas. Incluye:
-        - Valores de entrada (últimas 48 horas)
-        - Valores de predicción (próximas 24 horas)
-        - Fecha y hora de inicio de la predicción
-        - Estadísticas (min, max, promedio)
+        modelo LSTM. Muestra predicciones para las próximas 24 horas comenzando
+        desde una hora después de la hora actual.
         
         Args:
             municipio: Nombre del municipio (ej: 'riohacha', 'maicao', 'uribia').
         
         Returns:
-            Texto con la predicción y estadísticas.
+            Predicciones de viento para las próximas 24 horas desde ahora.
         
         Example:
             >>> obtener_prediccion_municipio("riohacha")
@@ -806,12 +803,18 @@ def create_tools(config: Configuration | None = None) -> List:
             conn = pymssql.connect(**db_config)
             cursor = conn.cursor()
             
+            # Obtener hora actual del servidor SQL
+            cursor.execute("SELECT GETDATE()")
+            server_now = cursor.fetchone()[0]
+            
+            # Redondear a la hora actual (hacia abajo)
+            current_hour = server_now.replace(minute=0, second=0, microsecond=0)
+            
             # Obtener la predicción más reciente
             query = """
             SELECT TOP 1
                 municipio,
                 datetime_inicio,
-                wind_speed_input,
                 wind_speed_output,
                 created_at
             FROM Forecast
@@ -826,60 +829,50 @@ def create_tools(config: Configuration | None = None) -> List:
                 conn.close()
                 return f"❌ No se encontraron predicciones para '{municipio}'.\n\nMunicipios disponibles: albania, barrancas, distraccion, el_molino, fonseca, hatonuevo, la_jagua_del_pilar, maicao, manaure, mingueo, riohacha, san_juan_del_cesar, uribia"
             
-            mun, dt_inicio, input_json, output_json, created = row
+            mun, dt_inicio, output_json, created = row
             
-            # Parsear arrays JSON
-            input_array = json.loads(input_json)
+            # Parsear array de predicciones
             output_array = json.loads(output_json)
             
-            # Calcular estadísticas
-            input_min = min(input_array)
-            input_max = max(input_array)
-            input_mean = sum(input_array) / len(input_array)
-            
-            output_min = min(output_array)
-            output_max = max(output_array)
-            output_mean = sum(output_array) / len(output_array)
-            
-            # Generar horas de predicción
-            forecast_hours = []
+            # Generar todas las horas de predicción desde dt_inicio
+            all_forecast_data = []
             current = dt_inicio
             for i in range(24):
-                forecast_hours.append(current.strftime('%Y-%m-%d %H:%M'))
+                all_forecast_data.append({
+                    'datetime': current,
+                    'hora': current.strftime('%Y-%m-%d %H:%M'),
+                    'viento': output_array[i]
+                })
                 current = current + timedelta(hours=1)
             
-            # Construir respuesta
-            result = f"""
-🔮 PREDICCIÓN DE VIENTO - {municipio.upper().replace('_', ' ')}
-{'='*70}
-
-📅 Fecha de inicio: {dt_inicio.strftime('%Y-%m-%d %H:%M')}
-⏱️  Generada: {created.strftime('%Y-%m-%d %H:%M:%S')}
-
-📊 ESTADÍSTICAS DE ENTRADA (últimas 48 horas):
-   • Mínimo: {input_min:.2f} m/s
-   • Máximo: {input_max:.2f} m/s
-   • Promedio: {input_mean:.2f} m/s
-   • Último valor: {input_array[-1]:.2f} m/s
-
-🔮 ESTADÍSTICAS DE PREDICCIÓN (próximas 24 horas):
-   • Mínimo: {output_min:.2f} m/s
-   • Máximo: {output_max:.2f} m/s
-   • Promedio: {output_mean:.2f} m/s
-   • Primera predicción: {output_array[0]:.2f} m/s
-
-📈 VALORES DE PREDICCIÓN (cada hora):
-"""
+            # Filtrar para obtener solo las próximas 24 horas desde la hora actual
+            forecast_data = []
+            for data in all_forecast_data:
+                if data['datetime'] >= current_hour:
+                    forecast_data.append(data)
+                if len(forecast_data) >= 24:
+                    break
             
-            # Mostrar valores en grupos de 6 horas
-            for i in range(0, 24, 6):
-                result += f"\n   Horas {i+1}-{min(i+6, 24)}:\n"
-                for j in range(i, min(i+6, 24)):
-                    result += f"   • {forecast_hours[j]}: {output_array[j]:.2f} m/s\n"
+            # Si no hay suficientes datos, usar lo que esté disponible
+            if len(forecast_data) == 0:
+                forecast_data = all_forecast_data[:24]
+            
+            # Construir respuesta concisa
+            result = f"🔮 Predicción de viento para {municipio.upper().replace('_', ' ')}:\n\n"
+            
+            # Agrupar en bloques de 6 horas para mejor legibilidad
+            for i in range(0, len(forecast_data), 6):
+                if i < len(forecast_data):
+                    result += f"📅 {forecast_data[i]['hora'][:10]}:\n"
+                    for j in range(i, min(i+6, len(forecast_data))):
+                        hora = forecast_data[j]['hora'][11:16]  # Solo HH:MM
+                        viento = forecast_data[j]['viento']
+                        result += f"  • {hora}h: {viento:.1f} m/s\n"
+                    result += "\n"
             
             conn.close()
             
-            return result
+            return result.strip()
             
         except Exception as e:
             return f"Error al obtener predicción: {str(e)}"
@@ -911,7 +904,17 @@ def create_tools(config: Configuration | None = None) -> List:
             conn = pymssql.connect(**db_config)
             cursor = conn.cursor()
             
-            # 1. Obtener predicción más reciente
+            # 1. Obtener hora actual del servidor SQL
+            cursor.execute("SELECT GETDATE()")
+            server_now = cursor.fetchone()[0]
+            
+            # Redondear a la hora más cercana (hacia abajo)
+            current_hour = server_now.replace(minute=0, second=0, microsecond=0)
+            
+            # Punto de separación = hora actual
+            separation_point = current_hour
+            
+            # 2. Obtener predicción más reciente
             query_forecast = """
             SELECT TOP 1
                 datetime_inicio,
@@ -936,10 +939,9 @@ def create_tools(config: Configuration | None = None) -> List:
             input_array = json.loads(input_json)
             output_array = json.loads(output_json)
             
-            # 2. Obtener datos históricos (últimas 48 horas antes de la predicción)
-            # La predicción comienza donde terminan los datos históricos
-            # Los datos de entrada son las últimas 48 horas
-            historical_start = dt_inicio - timedelta(hours=48)
+            # 3. Obtener datos históricos (últimas 48 horas hasta ahora)
+            historical_start = separation_point - timedelta(hours=48)
+            historical_end = separation_point
             
             query_historical = """
             SELECT 
@@ -952,7 +954,7 @@ def create_tools(config: Configuration | None = None) -> List:
             ORDER BY datetime
             """
             
-            cursor.execute(query_historical, (municipio, historical_start, dt_inicio))
+            cursor.execute(query_historical, (municipio, historical_start, historical_end))
             historical_data = cursor.fetchall()
             
             conn.close()
@@ -962,15 +964,38 @@ def create_tools(config: Configuration | None = None) -> List:
                 historical_times = [row[0] for row in historical_data]
                 historical_wind = [row[1] for row in historical_data]
             else:
-                # Si no hay datos en la BD, usar los valores de input
+                # Si no hay suficientes datos en la BD, usar datos interpolados
                 historical_times = [historical_start + timedelta(hours=i) for i in range(48)]
-                historical_wind = input_array
+                # Usar los últimos 48 valores disponibles o input_array
+                historical_wind = input_array if len(input_array) == 48 else [0] * 48
             
-            # Preparar datos de predicción
-            forecast_times = [dt_inicio + timedelta(hours=i) for i in range(24)]
-            forecast_wind = output_array
+            # 4. Preparar datos de predicción (24 horas futuras desde ahora)
+            # Generar todas las horas de predicción desde dt_inicio
+            all_forecast_data = []
+            current = dt_inicio
+            for i in range(24):
+                all_forecast_data.append({
+                    'datetime': current,
+                    'wind': output_array[i]
+                })
+                current = current + timedelta(hours=1)
             
-            # 3. Crear la gráfica
+            # Filtrar para obtener solo las próximas 24 horas desde separation_point
+            forecast_times = []
+            forecast_wind = []
+            for data in all_forecast_data:
+                if data['datetime'] >= separation_point:
+                    forecast_times.append(data['datetime'])
+                    forecast_wind.append(data['wind'])
+                if len(forecast_times) >= 24:
+                    break
+            
+            # Si no hay suficientes predicciones futuras, usar lo disponible
+            if len(forecast_times) == 0:
+                forecast_times = [dt_inicio + timedelta(hours=i) for i in range(24)]
+                forecast_wind = output_array
+            
+            # 5. Crear la gráfica
             fig, ax = plt.subplots(figsize=(14, 5))
             
             # Graficar ventana histórica (48h)
@@ -984,10 +1009,10 @@ def create_tools(config: Configuration | None = None) -> List:
                    color='orangered', label='Predicción (24h)', 
                    linestyle='--', alpha=0.8)
             
-            # Línea vertical separando histórico de predicción
-            ax.axvline(x=dt_inicio, color='gray',
+            # Línea vertical separando histórico de predicción (en la hora actual)
+            ax.axvline(x=separation_point, color='gray',
                       linestyle=':', linewidth=2, alpha=0.7,
-                      label='Inicio predicción')
+                      label='Ahora')
             
             # Configuración de la gráfica
             ax.set_xlabel('Fecha y Hora', fontsize=12, fontweight='bold')
@@ -1025,8 +1050,9 @@ def create_tools(config: Configuration | None = None) -> List:
 {'='*70}
 
 📍 Municipio: {municipio.upper().replace('_', ' ')}
-📅 Inicio predicción: {dt_inicio.strftime('%Y-%m-%d %H:%M')}
-⏱️  Generada: {created.strftime('%Y-%m-%d %H:%M:%S')}
+⏰ Hora actual: {separation_point.strftime('%Y-%m-%d %H:%M')}
+📅 Histórico: {historical_start.strftime('%Y-%m-%d %H:%M')} a {historical_end.strftime('%Y-%m-%d %H:%M')} (48h antes)
+📅 Predicción: {separation_point.strftime('%Y-%m-%d %H:%M')} a {(separation_point + timedelta(hours=23)).strftime('%Y-%m-%d %H:%M')} (24h futuras)
 
 📊 HISTÓRICO (últimas 48 horas):
    • Mínimo: {hist_min:.2f} m/s
@@ -1043,7 +1069,7 @@ def create_tools(config: Configuration | None = None) -> List:
 📈 TRANSICIÓN:
    • Diferencia histórico → predicción: {diff:+.2f} m/s
 
-📁 IMG_PATH: {filepath_abs}
+IMG_PATH: {filepath_abs}
 """
             
         except Exception as e:
