@@ -19,8 +19,9 @@ import sys
 import argparse
 import time
 import schedule
+import pytz
 from pathlib import Path
-from datetime import datetime, timedelta, timedelta
+from datetime import datetime, timedelta
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -32,6 +33,9 @@ from src.utils.forecast_db_updater import ForecastDBUpdater
 import pymssql
 import os
 from dotenv import load_dotenv
+
+# Zona horaria de Colombia
+COLOMBIA_TZ = pytz.timezone('America/Bogota')
 
  
 def update_historical_data():
@@ -105,7 +109,7 @@ def run_update(forecast_only=False, data_only=False):
     """
     print("\n" + "=" * 80)
     print("🚀 ACTUALIZACIÓN DE BASE DE DATOS")
-    print(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"⏰ {datetime.now(COLOMBIA_TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}")
     
     if forecast_only:
         print("📋 Modo: Solo predicciones")
@@ -167,7 +171,7 @@ def run_daemon():
     print("\n" + "=" * 80)
     print("🔄 MODO DAEMON INICIADO")
     print("=" * 80)
-    print(f"📅 Inicio: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"📅 Inicio: {datetime.now(COLOMBIA_TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}")
     print("")
     print("⏰ Programación:")
     print("   • Actualización COMPLETA cada hora a las XX:02")
@@ -194,12 +198,12 @@ def run_daemon():
     if result == 0:
         print("\n✅ Primera actualización completada")
         # Calcular próxima ejecución (próximo minuto 02)
-        now = datetime.now()
+        now = datetime.now(COLOMBIA_TZ)
         if now.minute < 2:
             next_run = now.replace(minute=2, second=0, microsecond=0)
         else:
             next_run = (now + timedelta(hours=1)).replace(minute=2, second=0, microsecond=0)
-        print(f"⏰ Próxima ejecución: {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"⏰ Próxima ejecución: {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')}")
     else:
         print("\n⚠️  Primera actualización tuvo errores, pero el daemon continuará")
     
@@ -214,7 +218,7 @@ def run_daemon():
         print("\n\n" + "=" * 80)
         print("🛑 DAEMON DETENIDO")
         print("=" * 80)
-        print(f"📅 Fin: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"📅 Fin: {datetime.now(COLOMBIA_TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}")
         print("=" * 80)
         sys.exit(0)
 
